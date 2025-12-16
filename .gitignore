@@ -1,0 +1,49 @@
+### 1. Project Specific (Dendrite) ###
+# 忽略 Docker 挂载的本地数据目录 (数据库和Redis文件)
+/data/
+# 忽略 Docker Compose 的本地覆写文件 (如果你以后要搞特异化配置)
+compose.override.yaml
+docker-compose.override.yml
+
+### 2. Secrets & Local Configs ###
+# 忽略环境变量文件
+.env
+# 忽略可能包含 Key 的本地配置文件
+application-local.yml
+application-secret.yml
+*.key
+*.pem
+
+### 3. Java / Maven Standard ###
+target/
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+# 忽略 Maven 依赖分析生成的文件
+dependency-reduced-pom.xml
+
+### 4. IntelliJ IDEA ###
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+
+### 5. VS Code / Eclipse / NetBeans ###
+.vscode/
+.settings/
+.classpath
+.project
+.factorypath
+bin/
+
+### 6. OS System Files ###
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+Desktop.ini
+
+### 7. Logs ###
+*.log
+logs/

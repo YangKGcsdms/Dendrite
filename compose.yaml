@@ -1,0 +1,38 @@
+services:
+  # 1. 核心数据库 (大脑记忆区)
+  # 我们不使用标准的 'postgres' 镜像，而是使用 'pgvector' 镜像
+  postgres:
+    image: 'pgvector/pgvector:pg16'  # 关键点：必须带 pgvector 插件
+    container_name: dendrite_db
+    ports:
+      - '5432:5432'
+    environment:
+      - 'POSTGRES_DB=dendrite'       # 数据库名
+      - 'POSTGRES_PASSWORD=secret'   # 开发密码
+      - 'POSTGRES_USER=myuser'
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data # 数据持久化，防止重启丢失
+    networks:
+      - dendrite_net
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U myuser -d dendrite" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 2. 消息队列 (园丁的神经传导)
+  # 用于暂存用户评价，实现异步解耦
+  redis:
+    image: 'redis:latest'
+    container_name: dendrite_redis
+    ports:
+      - '6380:6379'
+    command: redis-server --appendonly yes # 开启 AOF 持久化，防止断电丢数据
+    volumes:
+      - ./data/redis:/data
+    networks:
+      - dendrite_net
+
+networks:
+  dendrite_net:
+    driver: bridge

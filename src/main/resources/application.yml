@@ -1,0 +1,58 @@
+spring:
+  application:
+    name: dendrite # 项目代号: 树突
+
+  # 1. 数据库配置 (PostgreSQL + pgvector)
+  datasource:
+    # 注意: 这里的 /dendrite 对应 compose.yaml 里的 POSTGRES_DB
+    url: jdbc:postgresql://localhost:5432/dendrite
+    username: myuser
+    password: secret
+    driver-class-name: org.postgresql.Driver
+
+  # 2. JPA & Hibernate 配置
+  jpa:
+    # 自动更新表结构 (开发阶段用 update，生产环境建议用 validate 或 none)
+    hibernate:
+      ddl-auto: update
+    show-sql: true # 在控制台打印 SQL，方便你观察“园丁”在干什么
+    properties:
+      hibernate:
+        format_sql: true
+        # 使用 PostgreSQL 方言
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  # 3. Redis 配置 (消息队列)
+  data:
+    redis:
+      host: localhost
+      # ✅ 关键修改: 这里必须填 6380，因为你在 docker compose 里映射的是 6380
+      port: 6380
+      # 如果你的 Redis 没设密码，这里留空或注释掉
+      # password:
+
+  # 4. Spring AI 配置 (Google Gemini)
+  ai:
+    google:
+      gemini:
+        # 🔑 这里填你的 Key，或者在环境变量里设置 GEMINI_API_KEY
+        api-key: ${GEMINI_API_KEY}
+
+        # 聊天模型配置 (大脑)
+        chat:
+          options:
+            # 推荐用 Flash: 速度极快，且有 1M token 上下文，非常适合处理长文档
+            model: gemini-1.5-flash
+            temperature: 0.3 # 0.3 比较严谨，适合做信息提取；0.7 适合创意写作
+
+        # 向量模型配置 (翻译官)
+        embedding:
+          options:
+            # Google 最新的嵌入模型
+            model: text-embedding-004
+
+# 5. 日志级别控制
+logging:
+  level:
+    org.springframework.ai: DEBUG # 开启 AI 调试日志，可以看到发送给 Google 的具体 Prompt
+    org.hibernate.SQL: DEBUG
