@@ -1,4 +1,4 @@
-package com.carter.dendrite;
+package com.carter.controller;
 
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -26,7 +26,7 @@ public class HelloAIController {
 
         String prompt = """
                 你现在是 "Dendrite (树突)" 系统的智能核心。
-                请用【%s】的风格，向你的创造者 Carter 问好。
+                请用【%s】的风格，向你的创造者 一西 问好。
                 简短一点，50字以内。
                 """.formatted(style);
 
