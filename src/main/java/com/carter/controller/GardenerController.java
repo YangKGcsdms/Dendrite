@@ -1,30 +1,66 @@
 package com.carter.controller;
 
-
-import com.carter.entity.SkillRecord;
-import com.carter.service.GardenerService;
+import com.carter.entity.TalentProfile; // 👈 确保引入了你刚才建的 Entity
+import com.carter.service.SearchService;
+import com.carter.service.SummarizerService;
+import com.carter.task.EvaluationTask;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/gardener")
 public class GardenerController {
 
-    private final GardenerService gardenerService;
+    private final SearchService searchService;
+    private final RedisTemplate<String, Object> redisTemplate;
+    private final SummarizerService summarizerService; // ✅ 1. 声明服务
 
-    public GardenerController(GardenerService gardenerService) {
-        this.gardenerService = gardenerService;
+    private static final String QUEUE_KEY = "dendrite:evaluation:queue";
+
+    // ✅ 2. 关键修改：构造函数必须包含 SummarizerService，Spring 才能注入进来
+    public GardenerController(RedisTemplate<String, Object> redisTemplate,
+                              SummarizerService summarizerService,
+                              SearchService searchService) {
+        this.redisTemplate = redisTemplate;
+        this.summarizerService = summarizerService;
+        this.searchService = searchService;
     }
 
     /**
-     * 发送评价，触发 AI 分析
-     * POST http://localhost:8080/api/gardener/evaluate?employee=Carter
-     * Body (Raw Text): Carter 最近在负责重构旧系统，他熟练使用了 Spring Boot 3.0 的新特性，
-     * 把启动速度提升了50%。但是在编写文档方面有点偷懒。
+     * 阶段一：异步接收评价 (原始层 Raw Layer)
      */
     @PostMapping("/evaluate")
-    public List<SkillRecord> evaluate(@RequestParam String employee, @RequestBody String content) {
-        return gardenerService.processEvaluation(employee, content);
+    public Map<String, Object> submitEvaluation(@RequestParam String employee, @RequestBody String content) {
+        // 1. 打包任务
+        EvaluationTask task = new EvaluationTask(employee, content);
+
+        // 2. 扔进 Redis
+        redisTemplate.opsForList().leftPush(QUEUE_KEY, task);
+
+        // 3. 返回
+        return Map.of(
+                "success", true,
+                "message", "评价已提交至处理队列，园丁AI稍后分析。",
+                "employee", employee,
+                "status", "queued"
+        );
+    }
+
+    /**
+     * ✅ 3. 新增阶段二：触发 AI 自总结 (画像层 Profile Layer)
+     * URL: POST http://localhost:8080/api/gardener/summarize?employee=Carter
+     */
+    @PostMapping("/summarize")
+    public TalentProfile summarizeEmployee(@RequestParam String employee) {
+        // 直接调用总结服务，生成或更新画像
+        return summarizerService.generateProfile(employee);
+    }
+
+    @GetMapping("/search")
+    public List<Map<String, Object>> search(@RequestParam String query) {
+        return searchService.searchSimilarProfiles(query, 5); // 默认搜前 5 名
     }
 }
