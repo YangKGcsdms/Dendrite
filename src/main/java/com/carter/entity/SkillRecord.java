@@ -5,6 +5,7 @@ import jakarta.persistence.*;
 import lombok.Data;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * @author Carter
@@ -32,6 +33,11 @@ public class SkillRecord {
     // 原始证据 (原文片段)
     @Column(length = 1000)
     private String evidence;
+
+    @Convert(converter = com.carter.converter.VectorToStringConverter.class)
+    @Column(columnDefinition = "vector(768)")
+    @org.hibernate.annotations.ColumnTransformer(write = "?::vector", read = "embedding::text")
+    private List<Double> embedding;
 
     // 创建时间
     private LocalDateTime createdAt = LocalDateTime.now();

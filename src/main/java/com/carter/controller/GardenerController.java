@@ -63,4 +63,10 @@ public class GardenerController {
     public List<Map<String, Object>> search(@RequestParam String query) {
         return searchService.searchSimilarProfiles(query, 5); // 默认搜前 5 名
     }
+
+    @GetMapping("/ask")
+    public String ask(@RequestParam String query) {
+        // 返回的不再是冷冰冰的 List，而是 AI 的一段话
+        return searchService.searchAndRecommend(query);
+    }
 }

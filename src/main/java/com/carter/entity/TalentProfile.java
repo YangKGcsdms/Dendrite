@@ -3,6 +3,7 @@ package com.carter.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
+
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -31,6 +32,9 @@ public class TalentProfile {
     // 最后更新时间
     private LocalDateTime lastUpdated = LocalDateTime.now();
 
-    // (预留) 向量字段，未来搜人就搜这个字段
-    // private List<Double> embedding;
+    // 它是所有 SkillRecord 向量的平均值，或者是 AI 专门生成的一段 Summary 的向量
+    @Convert(converter = com.carter.converter.VectorToStringConverter.class)
+    @Column(columnDefinition = "vector(768)")
+    @org.hibernate.annotations.ColumnTransformer(write = "?::vector", read = "embedding::text")
+    private List<Double> embedding;
 }
