@@ -1,14 +1,21 @@
 spring:
   application:
-    name: dendrite # 项目代号: 树突
+    name: dendrite
 
-  # 1. 数据库配置 (PostgreSQL + pgvector)
+  # 1. Database configuration (PostgreSQL + pgvector)
   datasource:
-    # 注意: 这里的 /dendrite 对应 compose.yaml 里的 POSTGRES_DB
     url: jdbc:postgresql://localhost:5432/dendrite
     username: myuser
     password: secret
     driver-class-name: org.postgresql.Driver
+    # HikariCP connection pool (optimized for 2000 concurrent users)
+    hikari:
+      minimum-idle: 10           # Minimum idle connections
+      maximum-pool-size: 30      # Max connections (adjust based on DB capacity)
+      idle-timeout: 300000       # 5 minutes
+      max-lifetime: 1200000      # 20 minutes
+      connection-timeout: 20000  # 20 seconds
+      pool-name: DendritePool
 
   # 2. JPA & Hibernate 配置
   jpa:
@@ -39,8 +46,11 @@ spring:
         # 聊天模型配置 (大脑)
         chat:
           options:
-            # 推荐用 Flash: 速度极快，且有 1M token 上下文，非常适合处理长文档
-            model: gemini-2.5-pro
+            # ⚠️ 成本优化：使用 Flash 模型，比 Pro 便宜 25 倍！
+            # gemini-2.5-pro: $1.25/M输入, $10/M输出 (超贵!)
+            # gemini-2.0-flash: $0.10/M输入, $0.40/M输出 (推荐!)
+            # gemini-1.5-flash: 有免费层额度 (最省!)
+            model: gemini-2.0-flash
             temperature: 0.3 # 0.3 比较严谨，适合做信息提取；0.7 适合创意写作
 
         # 向量模型配置 (翻译官)
@@ -53,8 +63,18 @@ spring:
         project-id: csdmscarter
         location:  us-central1
 
-# 5. 日志级别控制
+# 5. Server configuration
+server:
+  tomcat:
+    max-threads: 200           # Max worker threads
+    min-spare-threads: 20      # Min idle threads
+    accept-count: 100          # Queue for incoming connections
+    max-connections: 10000     # Max concurrent connections
+
+# 6. Logging configuration
 logging:
   level:
-    org.springframework.ai: DEBUG # 开启 AI 调试日志，可以看到发送给 Google 的具体 Prompt
-    org.hibernate.SQL: DEBUG
+    org.springframework.ai: INFO
+    org.hibernate.SQL: WARN
+    com.carter: INFO
+    com.zaxxer.hikari: INFO

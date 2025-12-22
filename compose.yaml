@@ -8,7 +8,7 @@ services:
       - '5432:5432'
     environment:
       - 'POSTGRES_DB=dendrite'       # 数据库名
-      - 'POSTGRES_PASSWORD=secret'   # 开发密码
+      - 'POSTGRES_PASSWORD=secret'   # 开
       - 'POSTGRES_USER=myuser'
     volumes:
       - ./data/postgres:/var/lib/postgresql/data # 数据持久化，防止重启丢失

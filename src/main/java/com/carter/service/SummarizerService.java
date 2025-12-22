@@ -2,26 +2,43 @@ package com.carter.service;
 
 import com.carter.entity.SkillRecord;
 import com.carter.entity.TalentProfile;
+import com.carter.exception.DendriteException;
+import com.carter.exception.DendriteException.ErrorCode;
 import com.carter.repo.SkillRecordRepository;
 import com.carter.repo.TalentProfileRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.converter.BeanOutputConverter;
-import org.springframework.ai.embedding.EmbeddingModel; // 👈 新引入
-import org.springframework.jdbc.core.JdbcTemplate;     // 👈 新引入
+import org.springframework.ai.embedding.EmbeddingModel;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * Service for generating AI-powered talent profile summaries.
+ * Creates professional summaries and skill tags from evaluation data.
+ *
+ * @author Carter
+ * @since 1.0.0
+ */
 @Service
 public class SummarizerService {
 
+    private static final Logger log = LoggerFactory.getLogger(SummarizerService.class);
+
+    private static final String UPDATE_VECTOR_SQL =
+            "UPDATE dendrite_profiles SET embedding = ?::vector WHERE id = ?";
+
     private final ChatClient chatClient;
-    private final EmbeddingModel embeddingModel; // 向量模型
+    private final EmbeddingModel embeddingModel;
     private final SkillRecordRepository skillRepo;
     private final TalentProfileRepository profileRepo;
-    private final JdbcTemplate jdbcTemplate;     // JDBC 工具
+    private final JdbcTemplate jdbcTemplate;
 
     public SummarizerService(ChatClient.Builder builder,
                              EmbeddingModel embeddingModel,
@@ -35,68 +52,106 @@ public class SummarizerService {
         this.jdbcTemplate = jdbcTemplate;
     }
 
-    public record ProfileSummary(String summary, List<String> tags) {}
+    /**
+     * AI response DTO for bilingual profile summary.
+     */
+    public record ProfileSummary(
+            String summaryZh,      // Chinese summary
+            String summaryEn,      // English summary
+            List<String> tagsZh,   // Chinese skill tags
+            List<String> tagsEn    // English skill tags
+    ) {}
 
-    @Transactional // 开启事务，保证数据一致性
+    /**
+     * Generates or updates a talent profile for an employee.
+     * Creates AI-powered summary and vector embedding.
+     *
+     * @param employeeName the employee to summarize
+     * @return the generated/updated profile
+     * @throws DendriteException if no evaluation data exists
+     */
+    @Transactional
     public TalentProfile generateProfile(String employeeName) {
-        // 1. 捞取数据
+        log.info("Generating profile for employee: {}", employeeName);
+
         List<SkillRecord> records = skillRepo.findByEmployeeName(employeeName);
         if (records.isEmpty()) {
-            throw new RuntimeException("员工 " + employeeName + " 暂无数据");
+            throw new DendriteException(ErrorCode.EMPLOYEE_NO_DATA, employeeName);
         }
 
-        // 2. 准备 Prompt
+        ProfileSummary aiResult = generateAiSummary(employeeName, records);
+        TalentProfile profile = saveProfile(employeeName, aiResult);
+        updateProfileVector(profile, aiResult);
+
+        log.info("Profile generated for {}: {} skills extracted", employeeName,
+                aiResult != null && aiResult.tagsZh() != null ? aiResult.tagsZh().size() : 0);
+
+        return profile;
+    }
+
+    // ==========================================
+    // Private Helpers
+    // ==========================================
+
+    private ProfileSummary generateAiSummary(String employeeName, List<SkillRecord> records) {
         String rawEvidence = records.stream()
-                .map(r -> String.format("- %s (%s): %s", r.getSkillName(), r.getProficiency(), r.getEvidence()))
+                .map(r -> String.format("- %s (%s): %s",
+                        r.getSkillName(), r.getProficiency(), r.getEvidence()))
                 .collect(Collectors.joining("\n"));
 
         var converter = new BeanOutputConverter<>(ProfileSummary.class);
 
         String prompt = """
-                基于以下评价生成人才画像：
-                员工："%s"
-                评价集：
-                %s
+                你是一位专业的人才分析师。请根据以下评价信息生成【双语】人才画像：
                 
-                要求：
-                1. 生成一段 200 字的职业总结。
-                2. 提炼 5-10 个技能标签。
+                员工姓名："%s"
+                评价记录：
+                %s
+
+                请同时生成中文和英文版本：
+                
+                1. summaryZh：中文职业简介（约200字），突出核心能力、工作风格和价值
+                2. summaryEn：英文职业简介（约150 words），与中文内容对应
+                3. tagsZh：5-10个中文技能标签（如：Java开发、问题解决、团队协作）
+                4. tagsEn：对应的英文技能标签（如：Java Development, Problem Solving, Teamwork）
+                
+                注意：中英文标签数量必须一致，一一对应。
+                
                 %s
                 """.formatted(employeeName, rawEvidence, converter.getFormat());
 
-        // 3. AI 生成文本 (Chat)
         String response = chatClient.prompt(prompt).call().content();
-        ProfileSummary aiResult = converter.convert(response);
+        return converter.convert(response);
+    }
 
-        // 4. 保存普通数据 (JPA)
+    private TalentProfile saveProfile(String employeeName, ProfileSummary aiResult) {
         TalentProfile profile = profileRepo.findByEmployeeName(employeeName)
-                .orElse(new TalentProfile());
+                .orElseGet(TalentProfile::new);
+
         profile.setEmployeeName(employeeName);
         if (aiResult != null) {
-            profile.setProfessionalSummary(aiResult.summary());
-            profile.setTopSkills(aiResult.tags());
+            // Bilingual summaries
+            profile.setSummaryZh(aiResult.summaryZh());
+            profile.setSummaryEn(aiResult.summaryEn());
+            // Bilingual skill tags
+            profile.setSkillsZh(aiResult.tagsZh());
+            profile.setSkillsEn(aiResult.tagsEn());
         }
-        profile.setLastUpdated(java.time.LocalDateTime.now());
+        profile.setLastUpdated(LocalDateTime.now());
 
-        TalentProfile savedProfile = profileRepo.save(profile); // 先保存，拿到 ID
+        return profileRepo.save(profile);
+    }
 
-        // ==========================================
-        // 5. 注入灵魂：生成向量并更新 (JDBC)
-        // ==========================================
-        if (aiResult != null && aiResult.summary() != null) {
-            // A. 把“职业总结”变成向量 (耗时约 100-300ms)
-            float[] vector = embeddingModel.embed(aiResult.summary());
-
-            // B. 手动写 SQL 更新向量字段 (绕过 Hibernate)
-            // 注意：PGvector 这里的语法是 ?::vector
-            String sql = "UPDATE dendrite_profiles SET embedding = ?::vector WHERE id = ?";
-
-            // 需要把 float[] 转换成 Postgres 认识的格式，Spring AI 的 EmbeddingModel 通常返回 float[]
-            // JdbcTemplate 可以直接处理数组，或者我们需要转成 String (如 "[0.1, 0.2...]")
-            // 简单做法：直接传 float[] 数组，pgjdbc 驱动通常能处理
-            jdbcTemplate.update(sql, vector, savedProfile.getId());
+    private void updateProfileVector(TalentProfile profile, ProfileSummary aiResult) {
+        if (aiResult == null || aiResult.summaryEn() == null) {
+            return;
         }
 
-        return savedProfile;
+        // Use English summary for vector (better for semantic search)
+        String textForVector = aiResult.summaryEn() + " " + String.join(", ", aiResult.tagsEn());
+        float[] vector = embeddingModel.embed(textForVector);
+        jdbcTemplate.update(UPDATE_VECTOR_SQL, vector, profile.getId());
+
+        log.debug("Vector updated for profile: {}", profile.getId());
     }
 }

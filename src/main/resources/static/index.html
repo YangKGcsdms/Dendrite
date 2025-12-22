@@ -1,0 +1,1047 @@
+<!DOCTYPE html>
+<html lang="zh-CN" x-data="app()" x-init="init()">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dendrite - AI 人才知识库</title>
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Alpine.js -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        dendrite: {
+                            50: '#f0fdf4',
+                            100: '#dcfce7',
+                            200: '#bbf7d0',
+                            300: '#86efac',
+                            400: '#4ade80',
+                            500: '#22c55e',
+                            600: '#16a34a',
+                            700: '#15803d',
+                            800: '#166534',
+                            900: '#14532d',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['JetBrains Mono', 'Fira Code', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap');
+        
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #1a1a2e; }
+        ::-webkit-scrollbar-thumb { background: #4ade80; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #22c55e; }
+        
+        .glow { box-shadow: 0 0 20px rgba(74, 222, 128, 0.3); }
+        .glow-text { text-shadow: 0 0 10px rgba(74, 222, 128, 0.5); }
+        
+        @keyframes blink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
+        .cursor-blink::after { content: '▊'; animation: blink 1s infinite; color: #4ade80; }
+        
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .fade-in { animation: fadeIn 0.3s ease-out; }
+        
+        .neural-bg {
+            background: 
+                radial-gradient(circle at 20% 80%, rgba(74, 222, 128, 0.05) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(74, 222, 128, 0.05) 0%, transparent 50%),
+                radial-gradient(circle at 40% 40%, rgba(74, 222, 128, 0.03) 0%, transparent 30%),
+                #0a0a0f;
+        }
+        
+        .grid-pattern {
+            background-image: 
+                linear-gradient(rgba(74, 222, 128, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(74, 222, 128, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+        }
+    </style>
+</head>
+
+<body class="neural-bg grid-pattern min-h-screen text-gray-100 font-sans">
+    
+    <!-- Sidebar -->
+    <aside class="fixed left-0 top-0 h-full w-64 bg-black/40 backdrop-blur-xl border-r border-dendrite-500/20 z-50">
+        <!-- Logo -->
+        <div class="p-6 border-b border-dendrite-500/20">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-gradient-to-br from-dendrite-400 to-dendrite-600 rounded-lg flex items-center justify-center glow">
+                    <i data-lucide="brain" class="w-6 h-6 text-black"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold text-dendrite-400 glow-text">Dendrite</h1>
+                    <p class="text-xs text-gray-500" x-text="t('subtitle')"></p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Language Switcher -->
+        <div class="px-4 py-3 border-b border-dendrite-500/10">
+            <div class="flex gap-2">
+                <button @click="setLang('zh')" 
+                        :class="lang === 'zh' ? 'bg-dendrite-500/20 text-dendrite-400' : 'text-gray-500 hover:text-gray-300'"
+                        class="flex-1 py-1.5 rounded text-xs font-medium transition-all">中文</button>
+                <button @click="setLang('en')" 
+                        :class="lang === 'en' ? 'bg-dendrite-500/20 text-dendrite-400' : 'text-gray-500 hover:text-gray-300'"
+                        class="flex-1 py-1.5 rounded text-xs font-medium transition-all">English</button>
+            </div>
+        </div>
+        
+        <!-- Navigation -->
+        <nav class="p-4 space-y-2">
+            <template x-for="item in navItems" :key="item.id">
+                <button 
+                    @click="currentPage = item.id"
+                    :class="currentPage === item.id 
+                        ? 'bg-dendrite-500/20 text-dendrite-400 border-dendrite-500/50' 
+                        : 'text-gray-400 hover:bg-white/5 border-transparent hover:text-gray-200'"
+                    class="w-full flex items-center gap-3 px-4 py-3 rounded-lg border transition-all duration-200 text-left"
+                >
+                    <i :data-lucide="item.icon" class="w-5 h-5"></i>
+                    <span x-text="t(item.labelKey)" class="text-sm font-medium"></span>
+                    <span x-show="item.badge" x-text="item.badge" 
+                          class="ml-auto bg-dendrite-500/30 text-dendrite-400 text-xs px-2 py-0.5 rounded-full"></span>
+                </button>
+            </template>
+        </nav>
+        
+        <!-- System Status -->
+        <div class="absolute bottom-0 left-0 right-0 p-4 border-t border-dendrite-500/20">
+            <div class="flex items-center gap-2 text-xs">
+                <span class="w-2 h-2 rounded-full" :class="systemStatus.healthy ? 'bg-dendrite-400 animate-pulse' : 'bg-red-500'"></span>
+                <span class="text-gray-500" x-text="t('system')"></span>
+                <span :class="systemStatus.healthy ? 'text-dendrite-400' : 'text-red-400'" 
+                      x-text="systemStatus.healthy ? t('online') : t('offline')"></span>
+            </div>
+            <div class="mt-2 text-xs text-gray-600">
+                <span x-text="t('profiles') + ': ' + systemStatus.profileCount"></span> | 
+                <span x-text="t('queue') + ': ' + systemStatus.queueSize"></span>
+            </div>
+        </div>
+    </aside>
+    
+    <!-- Main Content -->
+    <main class="ml-64 min-h-screen">
+        <!-- Header -->
+        <header class="sticky top-0 z-40 bg-black/40 backdrop-blur-xl border-b border-dendrite-500/20 px-8 py-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-2xl font-bold" x-text="t(navItems.find(i => i.id === currentPage)?.labelKey)"></h2>
+                    <p class="text-sm text-gray-500 mt-1" x-text="t(navItems.find(i => i.id === currentPage)?.descKey)"></p>
+                </div>
+                <div class="flex items-center gap-4">
+                    <button @click="refreshStats()" class="p-2 hover:bg-white/5 rounded-lg transition-colors" :title="t('refresh')">
+                        <i data-lucide="refresh-cw" class="w-5 h-5 text-gray-400"></i>
+                    </button>
+                    <div class="text-right">
+                        <div class="text-xs text-gray-500" x-text="t('tokenUsage')"></div>
+                        <div class="text-sm text-dendrite-400 font-mono" x-text="'$' + tokenUsage.toFixed(4)"></div>
+                    </div>
+                </div>
+            </div>
+        </header>
+        
+        <!-- Page Content -->
+        <div class="p-8">
+            <!-- Dashboard Page -->
+            <div x-show="currentPage === 'dashboard'" x-transition:enter="fade-in" class="space-y-6">
+                <!-- Stats Cards -->
+                <div class="grid grid-cols-4 gap-6">
+                    <div class="bg-black/40 backdrop-blur border border-dendrite-500/20 rounded-xl p-6 hover:glow transition-all duration-300">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-gray-500 text-sm" x-text="t('totalProfiles')"></p>
+                                <p class="text-3xl font-bold text-dendrite-400 mt-2" x-text="stats.profileCount"></p>
+                            </div>
+                            <div class="w-12 h-12 bg-dendrite-500/20 rounded-lg flex items-center justify-center">
+                                <i data-lucide="users" class="w-6 h-6 text-dendrite-400"></i>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-black/40 backdrop-blur border border-dendrite-500/20 rounded-xl p-6 hover:glow transition-all duration-300">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-gray-500 text-sm" x-text="t('skillsIndexed')"></p>
+                                <p class="text-3xl font-bold text-blue-400 mt-2" x-text="stats.skillCount"></p>
+                            </div>
+                            <div class="w-12 h-12 bg-blue-500/20 rounded-lg flex items-center justify-center">
+                                <i data-lucide="sparkles" class="w-6 h-6 text-blue-400"></i>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-black/40 backdrop-blur border border-dendrite-500/20 rounded-xl p-6 hover:glow transition-all duration-300">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-gray-500 text-sm" x-text="t('queuePending')"></p>
+                                <p class="text-3xl font-bold text-amber-400 mt-2" x-text="stats.queueSize"></p>
+                            </div>
+                            <div class="w-12 h-12 bg-amber-500/20 rounded-lg flex items-center justify-center">
+                                <i data-lucide="clock" class="w-6 h-6 text-amber-400"></i>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-black/40 backdrop-blur border border-dendrite-500/20 rounded-xl p-6 hover:glow transition-all duration-300">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-gray-500 text-sm" x-text="t('memoryUsage')"></p>
+                                <p class="text-3xl font-bold text-purple-400 mt-2" x-text="stats.usedMemoryMB + 'MB'"></p>
+                            </div>
+                            <div class="w-12 h-12 bg-purple-500/20 rounded-lg flex items-center justify-center">
+                                <i data-lucide="cpu" class="w-6 h-6 text-purple-400"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Quick Actions -->
+                <div class="grid grid-cols-2 gap-6">
+                    <div class="bg-black/40 backdrop-blur border border-dendrite-500/20 rounded-xl p-6">
+                        <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                            <i data-lucide="zap" class="w-5 h-5 text-dendrite-400"></i>
+                            <span x-text="t('quickActions')"></span>
+                        </h3>
+                        <div class="grid grid-cols-2 gap-3">
+                            <button @click="currentPage = 'knowledge'" 
+                                    class="p-4 bg-dendrite-500/10 hover:bg-dendrite-500/20 border border-dendrite-500/30 rounded-lg transition-all text-left">
+                                <i data-lucide="plus-circle" class="w-5 h-5 text-dendrite-400 mb-2"></i>
+                                <p class="text-sm font-medium" x-text="t('addEvaluation')"></p>
+                            </button>
+                            <button @click="currentPage = 'search'" 
+                                    class="p-4 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 rounded-lg transition-all text-left">
+                                <i data-lucide="search" class="w-5 h-5 text-blue-400 mb-2"></i>
+                                <p class="text-sm font-medium" x-text="t('searchTalents')"></p>
+                            </button>
+                            <button @click="currentPage = 'profiles'" 
+                                    class="p-4 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 rounded-lg transition-all text-left">
+                                <i data-lucide="users" class="w-5 h-5 text-purple-400 mb-2"></i>
+                                <p class="text-sm font-medium" x-text="t('viewProfiles')"></p>
+                            </button>
+                            <button @click="processQueue()" 
+                                    class="p-4 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-lg transition-all text-left">
+                                <i data-lucide="play" class="w-5 h-5 text-amber-400 mb-2"></i>
+                                <p class="text-sm font-medium" x-text="t('processQueue')"></p>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-black/40 backdrop-blur border border-dendrite-500/20 rounded-xl p-6">
+                        <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                            <i data-lucide="terminal" class="w-5 h-5 text-dendrite-400"></i>
+                            <span x-text="t('systemLog')"></span>
+                        </h3>
+                        <div class="bg-black/60 rounded-lg p-4 h-40 overflow-y-auto font-mono text-xs">
+                            <template x-for="log in logs" :key="log.time">
+                                <div class="mb-1">
+                                    <span class="text-gray-600" x-text="log.time"></span>
+                                    <span :class="log.type === 'error' ? 'text-red-400' : log.type === 'success' ? 'text-dendrite-400' : 'text-gray-400'" 
+                                          x-text="' ' + log.message"></span>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Knowledge Input Page -->
+            <div x-show="currentPage === 'knowledge'" x-transition:enter="fade-in" class="max-w-4xl">
+                <div class="bg-black/40 backdrop-blur border border-dendrite-500/20 rounded-xl p-8">
+                    <h3 class="text-lg font-semibold mb-6 flex items-center gap-2">
+                        <i data-lucide="file-plus" class="w-5 h-5 text-dendrite-400"></i>
+                        <span x-text="t('submitEvaluation')"></span>
+                    </h3>
+                    
+                    <form @submit.prevent="submitEvaluation()" class="space-y-6">
+                        <div>
+                            <label class="block text-sm text-gray-400 mb-2" x-text="t('employeeName')"></label>
+                            <input type="text" x-model="evalForm.employee" required
+                                   class="w-full bg-black/40 border border-dendrite-500/30 rounded-lg px-4 py-3 text-white placeholder-gray-600 focus:border-dendrite-400 focus:outline-none focus:ring-1 focus:ring-dendrite-400/50 transition-all"
+                                   :placeholder="t('employeePlaceholder')">
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm text-gray-400 mb-2" x-text="t('evaluationContent')"></label>
+                            <textarea x-model="evalForm.content" required rows="8"
+                                      class="w-full bg-black/40 border border-dendrite-500/30 rounded-lg px-4 py-3 text-white placeholder-gray-600 focus:border-dendrite-400 focus:outline-none focus:ring-1 focus:ring-dendrite-400/50 transition-all resize-none"
+                                      :placeholder="t('contentPlaceholder')"></textarea>
+                        </div>
+                        
+                        <div class="flex items-center justify-between">
+                            <div class="text-sm text-gray-500">
+                                <i data-lucide="info" class="w-4 h-4 inline mr-1"></i>
+                                <span x-text="t('aiExtractHint')"></span>
+                            </div>
+                            <button type="submit" :disabled="evalLoading"
+                                    class="px-6 py-3 bg-gradient-to-r from-dendrite-500 to-dendrite-600 hover:from-dendrite-400 hover:to-dendrite-500 text-black font-semibold rounded-lg transition-all duration-300 disabled:opacity-50 flex items-center gap-2">
+                                <i data-lucide="send" class="w-4 h-4" x-show="!evalLoading"></i>
+                                <i data-lucide="loader-2" class="w-4 h-4 animate-spin" x-show="evalLoading"></i>
+                                <span x-text="evalLoading ? t('submitting') : t('submit')"></span>
+                            </button>
+                        </div>
+                    </form>
+                    
+                    <!-- Success Message -->
+                    <div x-show="evalSuccess" x-transition class="mt-6 p-4 bg-dendrite-500/20 border border-dendrite-500/40 rounded-lg">
+                        <div class="flex items-center gap-2 text-dendrite-400">
+                            <i data-lucide="check-circle" class="w-5 h-5"></i>
+                            <span x-text="t('submitSuccess') + evalQueuePos"></span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Batch Upload -->
+                <div class="bg-black/40 backdrop-blur border border-dendrite-500/20 rounded-xl p-8 mt-6">
+                    <h3 class="text-lg font-semibold mb-6 flex items-center gap-2">
+                        <i data-lucide="upload" class="w-5 h-5 text-blue-400"></i>
+                        <span x-text="t('batchUpload')"></span>
+                    </h3>
+                    <textarea x-model="batchJson" rows="6"
+                              class="w-full bg-black/40 border border-blue-500/30 rounded-lg px-4 py-3 text-white placeholder-gray-600 focus:border-blue-400 focus:outline-none font-mono text-sm"
+                              :placeholder="t('batchPlaceholder')"></textarea>
+                    <button @click="submitBatch()" 
+                            class="mt-4 px-6 py-3 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/40 text-blue-400 font-medium rounded-lg transition-all">
+                        <i data-lucide="upload-cloud" class="w-4 h-4 inline mr-2"></i>
+                        <span x-text="t('uploadBatch')"></span>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Profiles Page -->
+            <div x-show="currentPage === 'profiles'" x-transition:enter="fade-in" class="space-y-6">
+                <!-- Search Bar -->
+                <div class="flex gap-4">
+                    <div class="flex-1 relative">
+                        <i data-lucide="search" class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500"></i>
+                        <input type="text" x-model="profileSearch" @input="filterProfiles()"
+                               class="w-full bg-black/40 border border-dendrite-500/30 rounded-lg pl-12 pr-4 py-3 text-white placeholder-gray-600 focus:border-dendrite-400 focus:outline-none"
+                               :placeholder="t('filterByName')">
+                    </div>
+                    <button @click="loadProfiles()" class="px-6 py-3 bg-dendrite-500/20 hover:bg-dendrite-500/30 border border-dendrite-500/40 text-dendrite-400 rounded-lg transition-all">
+                        <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                    </button>
+                </div>
+                
+                <!-- Profile Grid -->
+                <div class="grid grid-cols-3 gap-6">
+                    <template x-for="profile in filteredProfiles" :key="profile.id">
+                        <div @click="viewProfile(profile)" 
+                             class="bg-black/40 backdrop-blur border border-dendrite-500/20 rounded-xl p-6 hover:border-dendrite-400/50 hover:glow cursor-pointer transition-all duration-300">
+                            <div class="flex items-start justify-between mb-4">
+                                <div class="w-12 h-12 bg-gradient-to-br from-dendrite-400 to-dendrite-600 rounded-full flex items-center justify-center text-black font-bold text-lg"
+                                     x-text="profile.employeeName?.charAt(0) || '?'"></div>
+                                <span class="text-xs text-gray-500" x-text="formatDate(profile.lastUpdated)"></span>
+                            </div>
+                            <h4 class="text-lg font-semibold text-white mb-2" x-text="profile.employeeName"></h4>
+                            <p class="text-sm text-gray-400 line-clamp-3" x-text="getSummary(profile) || t('noSummary')"></p>
+                            <div class="mt-4 flex flex-wrap gap-2">
+                                <template x-for="skill in getSkills(profile).slice(0, 3)" :key="skill">
+                                    <span class="px-2 py-1 bg-dendrite-500/20 text-dendrite-400 text-xs rounded-full" x-text="skill"></span>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+                
+                <!-- Empty State -->
+                <div x-show="filteredProfiles.length === 0" class="text-center py-20">
+                    <i data-lucide="users" class="w-16 h-16 text-gray-700 mx-auto mb-4"></i>
+                    <p class="text-gray-500" x-text="t('noProfiles')"></p>
+                    <button @click="currentPage = 'knowledge'" class="mt-4 text-dendrite-400 hover:underline" x-text="t('addFirstEval')"></button>
+                </div>
+                
+                <!-- Pagination -->
+                <div x-show="totalPages > 1" class="flex justify-center gap-2">
+                    <button @click="changePage(currentProfilePage - 1)" :disabled="currentProfilePage === 0"
+                            class="px-4 py-2 bg-black/40 border border-dendrite-500/30 rounded-lg disabled:opacity-30">
+                        <i data-lucide="chevron-left" class="w-4 h-4"></i>
+                    </button>
+                    <span class="px-4 py-2 text-gray-400" x-text="(currentProfilePage + 1) + ' / ' + totalPages"></span>
+                    <button @click="changePage(currentProfilePage + 1)" :disabled="currentProfilePage >= totalPages - 1"
+                            class="px-4 py-2 bg-black/40 border border-dendrite-500/30 rounded-lg disabled:opacity-30">
+                        <i data-lucide="chevron-right" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Search Page -->
+            <div x-show="currentPage === 'search'" x-transition:enter="fade-in" class="space-y-6">
+                <!-- Search Input -->
+                <div class="bg-black/40 backdrop-blur border border-dendrite-500/20 rounded-xl p-6">
+                    <div class="flex gap-4">
+                        <div class="flex-1 relative">
+                            <i data-lucide="sparkles" class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-dendrite-400"></i>
+                            <input type="text" x-model="searchQuery" @keyup.enter="performSearch()"
+                                   class="w-full bg-black/60 border border-dendrite-500/30 rounded-lg pl-12 pr-4 py-4 text-white placeholder-gray-500 focus:border-dendrite-400 focus:outline-none text-lg"
+                                   :placeholder="t('searchPlaceholder')">
+                        </div>
+                        <button @click="performSearch()" :disabled="searchLoading"
+                                class="px-8 py-4 bg-gradient-to-r from-dendrite-500 to-dendrite-600 hover:from-dendrite-400 hover:to-dendrite-500 text-black font-semibold rounded-lg transition-all disabled:opacity-50">
+                            <i data-lucide="search" class="w-5 h-5" x-show="!searchLoading"></i>
+                            <i data-lucide="loader-2" class="w-5 h-5 animate-spin" x-show="searchLoading"></i>
+                        </button>
+                    </div>
+                    
+                    <!-- Search Mode Toggle -->
+                    <div class="mt-4 flex items-center gap-6">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="radio" x-model="searchMode" value="vector" class="accent-dendrite-500">
+                            <span class="text-sm text-gray-400" x-text="t('vectorSearch')"></span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="radio" x-model="searchMode" value="ai" class="accent-dendrite-500">
+                            <span class="text-sm text-gray-400" x-text="t('aiRecommend')"></span>
+                        </label>
+                    </div>
+                </div>
+                
+                <!-- Search Results -->
+                <div x-show="searchResults.length > 0 || aiAnswer" class="space-y-4">
+                    <!-- AI Answer -->
+                    <div x-show="aiAnswer" class="bg-black/40 backdrop-blur border border-purple-500/30 rounded-xl p-6">
+                        <div class="flex items-center gap-2 mb-4">
+                            <i data-lucide="bot" class="w-5 h-5 text-purple-400"></i>
+                            <span class="text-purple-400 font-medium" x-text="t('aiRecommendation')"></span>
+                        </div>
+                        <div class="prose prose-invert max-w-none">
+                            <p class="text-gray-300 whitespace-pre-wrap" x-text="aiAnswer"></p>
+                        </div>
+                    </div>
+                    
+                    <!-- Vector Results -->
+                    <template x-for="result in searchResults" :key="result.name">
+                        <div class="bg-black/40 backdrop-blur border border-dendrite-500/20 rounded-xl p-6 hover:border-dendrite-400/50 transition-all">
+                            <div class="flex items-start justify-between">
+                                <div class="flex items-center gap-4">
+                                    <div class="w-12 h-12 bg-gradient-to-br from-dendrite-400 to-dendrite-600 rounded-full flex items-center justify-center text-black font-bold"
+                                         x-text="result.name?.charAt(0) || '?'"></div>
+                                    <div>
+                                        <h4 class="text-lg font-semibold text-white" x-text="result.name"></h4>
+                                        <p class="text-sm text-gray-500" x-text="result.summary?.substring(0, 100) + '...'"></p>
+                                    </div>
+                                </div>
+                                <div class="text-right">
+                                    <div class="text-2xl font-bold text-dendrite-400" x-text="(result.score * 100).toFixed(0) + '%'"></div>
+                                    <div class="text-xs text-gray-500" x-text="t('matchScore')"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+                
+                <!-- Empty State -->
+                <div x-show="!searchLoading && searchResults.length === 0 && !aiAnswer && searchQuery" class="text-center py-20">
+                    <i data-lucide="search-x" class="w-16 h-16 text-gray-700 mx-auto mb-4"></i>
+                    <p class="text-gray-500" x-text="t('noResults')"></p>
+                </div>
+            </div>
+            
+            <!-- Monitor Page -->
+            <div x-show="currentPage === 'monitor'" x-transition:enter="fade-in" class="space-y-6">
+                <div class="grid grid-cols-2 gap-6">
+                    <!-- Queue Status -->
+                    <div class="bg-black/40 backdrop-blur border border-dendrite-500/20 rounded-xl p-6">
+                        <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                            <i data-lucide="list-todo" class="w-5 h-5 text-amber-400"></i>
+                            <span x-text="t('evaluationQueue')"></span>
+                        </h3>
+                        <div class="flex items-center justify-between mb-4">
+                            <div>
+                                <p class="text-4xl font-bold text-amber-400" x-text="stats.queueSize"></p>
+                                <p class="text-sm text-gray-500" x-text="t('pendingTasks')"></p>
+                            </div>
+                            <button @click="processQueue()" 
+                                    class="px-4 py-2 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-400 rounded-lg transition-all">
+                                <i data-lucide="play" class="w-4 h-4 inline mr-2"></i>
+                                <span x-text="t('processNow')"></span>
+                            </button>
+                        </div>
+                        <div class="text-xs text-gray-500" x-text="t('autoProcessHint')"></div>
+                    </div>
+                    
+                    <!-- Token Usage -->
+                    <div class="bg-black/40 backdrop-blur border border-dendrite-500/20 rounded-xl p-6">
+                        <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                            <i data-lucide="coins" class="w-5 h-5 text-dendrite-400"></i>
+                            <span x-text="t('tokenUsageTitle')"></span>
+                        </h3>
+                        <div class="space-y-4">
+                            <div class="flex justify-between">
+                                <span class="text-gray-400" x-text="t('totalCost')"></span>
+                                <span class="text-dendrite-400 font-mono" x-text="'$' + (tokenReport.estimatedCost || 0).toFixed(4)"></span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-400" x-text="t('chatCalls')"></span>
+                                <span class="text-white" x-text="tokenReport.chatCalls || 0"></span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-400" x-text="t('embeddingCalls')"></span>
+                                <span class="text-white" x-text="tokenReport.embeddingCalls || 0"></span>
+                            </div>
+                            <button @click="resetTokens()" 
+                                    class="w-full mt-4 px-4 py-2 bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-400 rounded-lg transition-all text-sm"
+                                    x-text="t('resetStats')"></button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- System Health -->
+                <div class="bg-black/40 backdrop-blur border border-dendrite-500/20 rounded-xl p-6">
+                    <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                        <i data-lucide="activity" class="w-5 h-5 text-dendrite-400"></i>
+                        <span x-text="t('systemHealth')"></span>
+                    </h3>
+                    <div class="grid grid-cols-4 gap-6">
+                        <div class="text-center">
+                            <div class="w-16 h-16 mx-auto rounded-full flex items-center justify-center"
+                                 :class="health.database ? 'bg-dendrite-500/20' : 'bg-red-500/20'">
+                                <i data-lucide="database" class="w-8 h-8" :class="health.database ? 'text-dendrite-400' : 'text-red-400'"></i>
+                            </div>
+                            <p class="mt-2 text-sm" :class="health.database ? 'text-dendrite-400' : 'text-red-400'" x-text="t('database')"></p>
+                        </div>
+                        <div class="text-center">
+                            <div class="w-16 h-16 mx-auto rounded-full flex items-center justify-center"
+                                 :class="health.redis ? 'bg-dendrite-500/20' : 'bg-red-500/20'">
+                                <i data-lucide="hard-drive" class="w-8 h-8" :class="health.redis ? 'text-dendrite-400' : 'text-red-400'"></i>
+                            </div>
+                            <p class="mt-2 text-sm" :class="health.redis ? 'text-dendrite-400' : 'text-red-400'">Redis</p>
+                        </div>
+                        <div class="text-center">
+                            <div class="w-16 h-16 mx-auto bg-dendrite-500/20 rounded-full flex items-center justify-center">
+                                <i data-lucide="cpu" class="w-8 h-8 text-dendrite-400"></i>
+                            </div>
+                            <p class="mt-2 text-sm text-dendrite-400" x-text="stats.availableProcessors + ' ' + t('cores')"></p>
+                        </div>
+                        <div class="text-center">
+                            <div class="w-16 h-16 mx-auto bg-purple-500/20 rounded-full flex items-center justify-center">
+                                <i data-lucide="memory-stick" class="w-8 h-8 text-purple-400"></i>
+                            </div>
+                            <p class="mt-2 text-sm text-purple-400" x-text="stats.usedMemoryMB + '/' + stats.maxMemoryMB + ' MB'"></p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Cost Mode -->
+                <div class="bg-black/40 backdrop-blur border border-dendrite-500/20 rounded-xl p-6">
+                    <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                        <i data-lucide="settings" class="w-5 h-5 text-gray-400"></i>
+                        <span x-text="t('costControl')"></span>
+                    </h3>
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-white" x-text="t('economyMode')"></p>
+                            <p class="text-sm text-gray-500" x-text="t('economyModeHint')"></p>
+                        </div>
+                        <button @click="toggleEconomyMode()" 
+                                class="px-4 py-2 rounded-lg transition-all"
+                                :class="economyMode ? 'bg-dendrite-500 text-black' : 'bg-gray-700 text-gray-300'">
+                            <span x-text="economyMode ? t('on') : t('off')"></span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+    
+    <!-- Profile Detail Modal -->
+    <div x-show="showProfileModal" x-transition:enter="transition ease-out duration-200" 
+         x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+         class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-8">
+        <div @click.away="showProfileModal = false" 
+             class="bg-gray-900 border border-dendrite-500/30 rounded-2xl w-full max-w-3xl max-h-[80vh] overflow-y-auto">
+            <div class="p-8">
+                <div class="flex items-start justify-between mb-6">
+                    <div class="flex items-center gap-4">
+                        <div class="w-16 h-16 bg-gradient-to-br from-dendrite-400 to-dendrite-600 rounded-full flex items-center justify-center text-black font-bold text-2xl"
+                             x-text="selectedProfile?.employeeName?.charAt(0) || '?'"></div>
+                        <div>
+                            <h2 class="text-2xl font-bold" x-text="selectedProfile?.employeeName"></h2>
+                            <p class="text-sm text-gray-500" x-text="t('lastUpdated') + ': ' + formatDate(selectedProfile?.lastUpdated)"></p>
+                        </div>
+                    </div>
+                    <button @click="showProfileModal = false" class="p-2 hover:bg-white/10 rounded-lg">
+                        <i data-lucide="x" class="w-6 h-6 text-gray-400"></i>
+                    </button>
+                </div>
+                
+                <div class="space-y-6">
+                    <div>
+                        <h4 class="text-sm text-gray-500 mb-2" x-text="t('summary')"></h4>
+                        <p class="text-gray-300" x-text="getSummary(selectedProfile) || t('noSummary')"></p>
+                    </div>
+                    
+                    <div x-show="getSkills(selectedProfile)?.length">
+                        <h4 class="text-sm text-gray-500 mb-2" x-text="t('topSkills')"></h4>
+                        <div class="flex flex-wrap gap-2">
+                            <template x-for="skill in getSkills(selectedProfile)" :key="skill">
+                                <span class="px-3 py-1 bg-dendrite-500/20 text-dendrite-400 rounded-full" x-text="skill"></span>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Toast Notification -->
+    <div x-show="toast.show" x-transition
+         class="fixed bottom-6 right-6 px-6 py-4 rounded-lg shadow-lg z-50"
+         :class="toast.type === 'success' ? 'bg-dendrite-500 text-black' : toast.type === 'error' ? 'bg-red-500 text-white' : 'bg-gray-700 text-white'">
+        <span x-text="toast.message"></span>
+    </div>
+
+    <script>
+        // i18n translations
+        const i18n = {
+            zh: {
+                subtitle: 'AI 人才知识库',
+                dashboard: '仪表盘',
+                dashboardDesc: '系统概览和快捷操作',
+                knowledge: '知识录入',
+                knowledgeDesc: '提交评价，构建知识库',
+                profiles: '人才库',
+                profilesDesc: '浏览人才画像',
+                search: '智能搜索',
+                searchDesc: '语义搜索与 AI 推荐',
+                monitor: '系统监控',
+                monitorDesc: '系统健康与成本控制',
+                system: '系统',
+                online: '在线',
+                offline: '离线',
+                queue: '队列',
+                refresh: '刷新',
+                tokenUsage: 'Token 消耗',
+                totalProfiles: '人才总数',
+                skillsIndexed: '技能索引',
+                queuePending: '待处理队列',
+                memoryUsage: '内存使用',
+                quickActions: '快捷操作',
+                addEvaluation: '添加评价',
+                searchTalents: '搜索人才',
+                viewProfiles: '查看画像',
+                processQueue: '处理队列',
+                systemLog: '系统日志',
+                submitEvaluation: '提交评价',
+                employeeName: '员工姓名',
+                employeePlaceholder: '例如：张三',
+                evaluationContent: '评价内容',
+                contentPlaceholder: '描述这个人的技能、项目、贡献...\n\n示例：\n张三完成了微服务架构重构项目，精通 Spring Cloud 和 Kubernetes。带领 5 人团队提前 2 周交付项目。解决问题能力出色，指导了 3 名初级开发者。',
+                aiExtractHint: 'AI 将自动提取技能并生成人才画像',
+                submitting: '提交中...',
+                submit: '提交评价',
+                submitSuccess: '评价提交成功！队列位置：',
+                batchUpload: '批量上传 (JSON)',
+                batchPlaceholder: '[\n  {"employee": "张三", "content": "精通 Java 和 Spring Boot..."},\n  {"employee": "李四", "content": "前端专家，擅长 React 和 Vue..."}\n]',
+                uploadBatch: '批量上传',
+                filterByName: '按姓名筛选...',
+                noSummary: '暂无简介',
+                noProfiles: '暂无人才数据',
+                addFirstEval: '添加第一条评价 →',
+                searchPlaceholder: '描述你要找的人才...',
+                vectorSearch: '向量搜索',
+                aiRecommend: 'AI 推荐',
+                aiRecommendation: 'AI 推荐结果',
+                matchScore: '匹配度',
+                noResults: '未找到匹配的人才',
+                evaluationQueue: '评价队列',
+                pendingTasks: '待处理任务',
+                processNow: '立即处理',
+                autoProcessHint: '每 5 分钟自动处理，批量大小：10',
+                tokenUsageTitle: 'Token 使用统计',
+                totalCost: '总费用',
+                chatCalls: '对话调用次数',
+                embeddingCalls: '向量化调用次数',
+                resetStats: '重置统计',
+                systemHealth: '系统健康',
+                database: '数据库',
+                cores: '核心',
+                costControl: '成本控制',
+                economyMode: '省钱模式',
+                economyModeHint: '关闭查询扩展以节省 AI 调用',
+                on: '开启',
+                off: '关闭',
+                lastUpdated: '最后更新',
+                summary: '简介',
+                topSkills: '核心技能',
+            },
+            en: {
+                subtitle: 'AI Talent Knowledge Base',
+                dashboard: 'Dashboard',
+                dashboardDesc: 'System overview and quick actions',
+                knowledge: 'Knowledge',
+                knowledgeDesc: 'Submit evaluations, build knowledge base',
+                profiles: 'Profiles',
+                profilesDesc: 'Browse talent profiles',
+                search: 'Search',
+                searchDesc: 'Semantic search and AI recommendations',
+                monitor: 'Monitor',
+                monitorDesc: 'System health and cost control',
+                system: 'System',
+                online: 'Online',
+                offline: 'Offline',
+                queue: 'Queue',
+                refresh: 'Refresh',
+                tokenUsage: 'Token Usage',
+                totalProfiles: 'Total Profiles',
+                skillsIndexed: 'Skills Indexed',
+                queuePending: 'Queue Pending',
+                memoryUsage: 'Memory Usage',
+                quickActions: 'Quick Actions',
+                addEvaluation: 'Add Evaluation',
+                searchTalents: 'Search Talents',
+                viewProfiles: 'View Profiles',
+                processQueue: 'Process Queue',
+                systemLog: 'System Log',
+                submitEvaluation: 'Submit Evaluation',
+                employeeName: 'Employee Name',
+                employeePlaceholder: 'e.g., John Doe',
+                evaluationContent: 'Evaluation Content',
+                contentPlaceholder: 'Describe this person\'s skills, projects, contributions...\n\nExample:\nJohn completed the microservices architecture refactoring project, proficient in Spring Cloud and Kubernetes. Led a team of 5 to deliver the project 2 weeks ahead of schedule.',
+                aiExtractHint: 'AI will extract skills and build talent profile automatically',
+                submitting: 'Submitting...',
+                submit: 'Submit Evaluation',
+                submitSuccess: 'Evaluation submitted! Queue position: ',
+                batchUpload: 'Batch Upload (JSON)',
+                batchPlaceholder: '[\n  {"employee": "John", "content": "Proficient in Java and Spring Boot..."},\n  {"employee": "Jane", "content": "Frontend expert with React and Vue..."}\n]',
+                uploadBatch: 'Upload Batch',
+                filterByName: 'Filter by name...',
+                noSummary: 'No summary yet',
+                noProfiles: 'No profiles found',
+                addFirstEval: 'Add your first evaluation →',
+                searchPlaceholder: 'Describe the talent you\'re looking for...',
+                vectorSearch: 'Vector Search',
+                aiRecommend: 'AI Recommendation',
+                aiRecommendation: 'AI Recommendation',
+                matchScore: 'Match Score',
+                noResults: 'No matching talents found',
+                evaluationQueue: 'Evaluation Queue',
+                pendingTasks: 'Pending Tasks',
+                processNow: 'Process Now',
+                autoProcessHint: 'Auto-processing every 5 minutes, batch size: 10',
+                tokenUsageTitle: 'Token Usage',
+                totalCost: 'Total Cost',
+                chatCalls: 'Chat Calls',
+                embeddingCalls: 'Embedding Calls',
+                resetStats: 'Reset Statistics',
+                systemHealth: 'System Health',
+                database: 'Database',
+                cores: 'Cores',
+                costControl: 'Cost Control',
+                economyMode: 'Economy Mode',
+                economyModeHint: 'Disable query expansion to save AI calls',
+                on: 'ON',
+                off: 'OFF',
+                lastUpdated: 'Last Updated',
+                summary: 'Summary',
+                topSkills: 'Top Skills',
+            }
+        };
+        
+        function app() {
+            return {
+                // Language
+                lang: localStorage.getItem('dendrite_lang') || 'zh',
+                
+                // Navigation
+                currentPage: 'dashboard',
+                navItems: [
+                    { id: 'dashboard', labelKey: 'dashboard', icon: 'layout-dashboard', descKey: 'dashboardDesc' },
+                    { id: 'knowledge', labelKey: 'knowledge', icon: 'brain', descKey: 'knowledgeDesc' },
+                    { id: 'profiles', labelKey: 'profiles', icon: 'users', descKey: 'profilesDesc' },
+                    { id: 'search', labelKey: 'search', icon: 'search', descKey: 'searchDesc' },
+                    { id: 'monitor', labelKey: 'monitor', icon: 'activity', descKey: 'monitorDesc' },
+                ],
+                
+                // System Status
+                systemStatus: { healthy: false, profileCount: 0, queueSize: 0 },
+                stats: { profileCount: 0, skillCount: 0, queueSize: 0, usedMemoryMB: 0, maxMemoryMB: 0, availableProcessors: 0 },
+                health: { database: false, redis: false },
+                tokenUsage: 0,
+                tokenReport: {},
+                economyMode: false,
+                logs: [],
+                
+                // Evaluation Form
+                evalForm: { employee: '', content: '' },
+                evalLoading: false,
+                evalSuccess: false,
+                evalQueuePos: 0,
+                batchJson: '',
+                
+                // Profiles
+                profiles: [],
+                filteredProfiles: [],
+                profileSearch: '',
+                currentProfilePage: 0,
+                totalPages: 1,
+                showProfileModal: false,
+                selectedProfile: null,
+                
+                // Search
+                searchQuery: '',
+                searchMode: 'ai',
+                searchLoading: false,
+                searchResults: [],
+                aiAnswer: '',
+                
+                // Toast
+                toast: { show: false, message: '', type: 'info' },
+                
+                // i18n helper
+                t(key) {
+                    return i18n[this.lang]?.[key] || i18n['en'][key] || key;
+                },
+                
+                // Bilingual content helpers
+                getSummary(profile) {
+                    if (!profile) return '';
+                    // Try bilingual fields first, fallback to legacy fields
+                    if (this.lang === 'zh') {
+                        return profile.summaryZh || profile.summary || profile.professionalSummary || '';
+                    } else {
+                        return profile.summaryEn || profile.summary || profile.professionalSummary || '';
+                    }
+                },
+                
+                getSkills(profile) {
+                    if (!profile) return [];
+                    // Try bilingual fields first, fallback to legacy fields
+                    if (this.lang === 'zh') {
+                        return profile.skillsZh || profile.topSkills || [];
+                    } else {
+                        return profile.skillsEn || profile.topSkills || [];
+                    }
+                },
+                
+                setLang(newLang) {
+                    this.lang = newLang;
+                    localStorage.setItem('dendrite_lang', newLang);
+                    document.documentElement.lang = newLang === 'zh' ? 'zh-CN' : 'en';
+                },
+                
+                async init() {
+                    document.documentElement.lang = this.lang === 'zh' ? 'zh-CN' : 'en';
+                    await this.refreshStats();
+                    await this.loadProfiles();
+                    this.addLog('info', this.t('system') + ' initialized');
+                    lucide.createIcons();
+                    
+                    setInterval(() => this.refreshStats(), 30000);
+                },
+                
+                async refreshStats() {
+                    try {
+                        const [healthRes, statsRes, tokenRes] = await Promise.all([
+                            fetch('/api/v1/health'),
+                            fetch('/api/v1/stats'),
+                            fetch('/api/v1/gardener/token/report')
+                        ]);
+                        
+                        const health = await healthRes.json();
+                        const stats = await statsRes.json();
+                        const token = await tokenRes.json();
+                        
+                        this.health = health.data || {};
+                        this.stats = stats.data || {};
+                        this.tokenReport = token.data || {};
+                        this.tokenUsage = this.tokenReport.estimatedCost || 0;
+                        
+                        this.systemStatus = {
+                            healthy: this.health.database && this.health.redis,
+                            profileCount: this.stats.profileCount,
+                            queueSize: this.stats.queueSize
+                        };
+                        
+                        this.$nextTick(() => lucide.createIcons());
+                    } catch (e) {
+                        this.addLog('error', 'Failed to fetch stats: ' + e.message);
+                    }
+                },
+                
+                async loadProfiles() {
+                    try {
+                        const res = await fetch(`/api/v1/profiles?page=${this.currentProfilePage}&size=9`);
+                        const data = await res.json();
+                        this.profiles = data.data?.content || [];
+                        this.filteredProfiles = this.profiles;
+                        this.totalPages = data.data?.totalPages || 1;
+                        this.$nextTick(() => lucide.createIcons());
+                    } catch (e) {
+                        this.addLog('error', 'Failed to load profiles');
+                    }
+                },
+                
+                filterProfiles() {
+                    const q = this.profileSearch.toLowerCase();
+                    this.filteredProfiles = this.profiles.filter(p => 
+                        p.employeeName?.toLowerCase().includes(q)
+                    );
+                },
+                
+                changePage(page) {
+                    if (page >= 0 && page < this.totalPages) {
+                        this.currentProfilePage = page;
+                        this.loadProfiles();
+                    }
+                },
+                
+                viewProfile(profile) {
+                    this.selectedProfile = profile;
+                    this.showProfileModal = true;
+                    this.$nextTick(() => lucide.createIcons());
+                },
+                
+                async submitEvaluation() {
+                    if (!this.evalForm.employee || !this.evalForm.content) return;
+                    
+                    this.evalLoading = true;
+                    this.evalSuccess = false;
+                    
+                    try {
+                        const res = await fetch(`/api/v1/gardener/evaluate?employee=${encodeURIComponent(this.evalForm.employee)}`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'text/plain' },
+                            body: this.evalForm.content
+                        });
+                        const data = await res.json();
+                        
+                        if (data.success) {
+                            this.evalSuccess = true;
+                            this.evalQueuePos = data.data?.queuePosition || 0;
+                            this.evalForm = { employee: '', content: '' };
+                            this.showToast(this.t('submitSuccess'), 'success');
+                            this.addLog('success', `Submitted: ${data.data?.employee}`);
+                            this.refreshStats();
+                        } else {
+                            this.showToast(data.message || 'Failed', 'error');
+                        }
+                    } catch (e) {
+                        this.showToast('Network error', 'error');
+                        this.addLog('error', e.message);
+                    } finally {
+                        this.evalLoading = false;
+                    }
+                },
+                
+                async submitBatch() {
+                    try {
+                        const evaluations = JSON.parse(this.batchJson);
+                        const res = await fetch('/api/v1/gardener/evaluate/batch', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(evaluations)
+                        });
+                        const data = await res.json();
+                        
+                        if (data.success) {
+                            this.showToast(`Submitted ${data.data?.submitted} evaluations`, 'success');
+                            this.batchJson = '';
+                            this.refreshStats();
+                        }
+                    } catch (e) {
+                        this.showToast('Invalid JSON format', 'error');
+                    }
+                },
+                
+                async performSearch() {
+                    if (!this.searchQuery.trim()) return;
+                    
+                    this.searchLoading = true;
+                    this.searchResults = [];
+                    this.aiAnswer = '';
+                    
+                    try {
+                        if (this.searchMode === 'vector') {
+                            const res = await fetch(`/api/v1/gardener/search?query=${encodeURIComponent(this.searchQuery)}`);
+                            const data = await res.json();
+                            this.searchResults = data.data || [];
+                        } else {
+                            const res = await fetch(`/api/v1/gardener/ask?query=${encodeURIComponent(this.searchQuery)}`);
+                            const data = await res.json();
+                            this.aiAnswer = data.data || '';
+                        }
+                        
+                        this.addLog('success', `Search: "${this.searchQuery.substring(0, 20)}..."`);
+                        this.refreshStats();
+                    } catch (e) {
+                        this.showToast('Search failed', 'error');
+                        this.addLog('error', e.message);
+                    } finally {
+                        this.searchLoading = false;
+                        this.$nextTick(() => lucide.createIcons());
+                    }
+                },
+                
+                async processQueue() {
+                    try {
+                        const res = await fetch('/api/v1/gardener/queue/process', { method: 'POST' });
+                        const data = await res.json();
+                        
+                        if (data.success) {
+                            if (data.data) {
+                                this.showToast(`${data.data.skillsExtracted} skills, ${data.data.profilesUpdated} profiles`, 'success');
+                                this.addLog('success', `Pipeline: ${data.data.durationMs}ms`);
+                            } else {
+                                this.showToast(this.lang === 'zh' ? '队列为空' : 'Queue is empty', 'info');
+                            }
+                            this.refreshStats();
+                            this.loadProfiles();
+                        }
+                    } catch (e) {
+                        this.showToast('Process failed', 'error');
+                    }
+                },
+                
+                async resetTokens() {
+                    await fetch('/api/v1/gardener/token/reset', { method: 'POST' });
+                    this.showToast(this.lang === 'zh' ? '统计已重置' : 'Stats reset', 'success');
+                    this.refreshStats();
+                },
+                
+                async toggleEconomyMode() {
+                    this.economyMode = !this.economyMode;
+                    await fetch(`/api/v1/gardener/cost-mode?economyMode=${this.economyMode}`, { method: 'POST' });
+                    this.showToast(this.economyMode 
+                        ? (this.lang === 'zh' ? '省钱模式已开启' : 'Economy mode ON')
+                        : (this.lang === 'zh' ? '效果模式已开启' : 'Performance mode ON'), 
+                        'success');
+                },
+                
+                formatDate(dateStr) {
+                    if (!dateStr) return '';
+                    const opts = this.lang === 'zh' 
+                        ? { month: 'numeric', day: 'numeric' }
+                        : { month: 'short', day: 'numeric', year: 'numeric' };
+                    return new Date(dateStr).toLocaleDateString(this.lang === 'zh' ? 'zh-CN' : 'en-US', opts);
+                },
+                
+                addLog(type, message) {
+                    const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+                    this.logs.unshift({ time, type, message });
+                    if (this.logs.length > 50) this.logs.pop();
+                },
+                
+                showToast(message, type = 'info') {
+                    this.toast = { show: true, message, type };
+                    setTimeout(() => this.toast.show = false, 3000);
+                }
+            }
+        }
+    </script>
+</body>
+</html>

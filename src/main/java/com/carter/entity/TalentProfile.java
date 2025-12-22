@@ -1,14 +1,23 @@
 package com.carter.entity;
 
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
+/**
+ * Talent profile entity containing AI-generated bilingual summaries.
+ *
+ * @author Carter
+ * @since 1.0.0
+ */
 @Entity
-@Data
+@Getter
+@Setter
 @Table(name = "dendrite_profiles")
 public class TalentProfile {
 
@@ -16,25 +25,66 @@ public class TalentProfile {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // 唯一索引，每个员工只有一张画像
     @Column(unique = true)
     private String employeeName;
 
-    // AI 生成的 200 字职业总结
-    @Column(length = 2000)
-    private String professionalSummary;
+    /**
+     * Chinese professional summary.
+     */
+    @Column(name = "summary_zh", length = 2000)
+    private String summaryZh;
 
-    // AI 归纳后的去重技能标签 (存成 JSON 字符串或简单列表)
-    // 比如: ["Redis", "Spring Boot", "沟通能力"]
+    /**
+     * English professional summary.
+     */
+    @Column(name = "summary_en", length = 2000)
+    private String summaryEn;
+
+    /**
+     * Chinese skill tags.
+     */
     @ElementCollection
-    private List<String> topSkills;
+    @CollectionTable(name = "profile_skills_zh")
+    private List<String> skillsZh;
 
-    // 最后更新时间
+    /**
+     * English skill tags.
+     */
+    @ElementCollection
+    @CollectionTable(name = "profile_skills_en")
+    private List<String> skillsEn;
+
     private LocalDateTime lastUpdated = LocalDateTime.now();
 
-    // 它是所有 SkillRecord 向量的平均值，或者是 AI 专门生成的一段 Summary 的向量
     @Convert(converter = com.carter.converter.VectorToStringConverter.class)
     @Column(columnDefinition = "vector(768)")
     @org.hibernate.annotations.ColumnTransformer(write = "?::vector", read = "embedding::text")
+    @JsonIgnore
     private List<Double> embedding;
+
+    // ==========================================
+    // Legacy compatibility (for existing code)
+    // ==========================================
+    
+    @Transient
+    @JsonIgnore
+    public String getProfessionalSummary() {
+        return summaryZh;
+    }
+
+    @Transient
+    public void setProfessionalSummary(String summary) {
+        this.summaryZh = summary;
+    }
+
+    @Transient
+    @JsonIgnore
+    public List<String> getTopSkills() {
+        return skillsZh;
+    }
+
+    @Transient
+    public void setTopSkills(List<String> skills) {
+        this.skillsZh = skills;
+    }
 }

@@ -12,20 +12,40 @@
     <artifactId>dendrite</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>Dendrite</name>
-    <description>Dendrite</description>
-    <url/>
+    <description>AI-Powered Talent Discovery System - Extract skills from evaluations, generate profiles, and find the right people with semantic search</description>
+    <url>https://github.com/your-username/dendrite</url>
+    
     <licenses>
-        <license/>
+        <license>
+            <name>MIT License</name>
+            <url>https://opensource.org/licenses/MIT</url>
+            <distribution>repo</distribution>
+        </license>
     </licenses>
+    
     <developers>
-        <developer/>
+        <developer>
+            <id>carter</id>
+            <name>Carter</name>
+            <email>carter@example.com</email>
+            <roles>
+                <role>Project Lead</role>
+                <role>Developer</role>
+            </roles>
+        </developer>
     </developers>
+    
     <scm>
-        <connection/>
-        <developerConnection/>
-        <tag/>
-        <url/>
+        <connection>scm:git:git://github.com/your-username/dendrite.git</connection>
+        <developerConnection>scm:git:ssh://github.com:your-username/dendrite.git</developerConnection>
+        <tag>HEAD</tag>
+        <url>https://github.com/your-username/dendrite</url>
     </scm>
+    
+    <issueManagement>
+        <system>GitHub Issues</system>
+        <url>https://github.com/your-username/dendrite/issues</url>
+    </issueManagement>
     <properties>
         <java.version>21</java.version>
         <spring-ai.version>1.1.2</spring-ai.version>

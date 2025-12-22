@@ -6,8 +6,9 @@ compose.override.yaml
 docker-compose.override.yml
 
 ### 2. Secrets & Local Configs ###
-# 忽略环境变量文件
+# 忽略环境变量文件 (但保留 .env.example 模板)
 .env
+!.env.example
 # 忽略可能包含 Key 的本地配置文件
 application-local.yml
 application-secret.yml
