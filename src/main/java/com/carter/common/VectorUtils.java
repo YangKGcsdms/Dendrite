@@ -111,5 +111,19 @@ public final class VectorUtils {
 
         return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
     }
+
+    /**
+     * Converts a List of Doubles to a PostgreSQL vector string format.
+     * Example: [0.123, 0.456, 0.789]
+     *
+     * @param vector the vector list
+     * @return string representation compatible with pgvector
+     */
+    public static String toVectorString(List<Double> vector) {
+        if (vector == null || vector.isEmpty()) {
+            return "[]";
+        }
+        return vector.toString();
+    }
 }
 

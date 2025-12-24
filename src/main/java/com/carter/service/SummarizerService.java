@@ -39,17 +39,20 @@ public class SummarizerService {
     private final SkillRecordRepository skillRepo;
     private final TalentProfileRepository profileRepo;
     private final JdbcTemplate jdbcTemplate;
+    private final com.carter.common.QuotaManager quotaManager;
 
     public SummarizerService(ChatClient.Builder builder,
                              EmbeddingModel embeddingModel,
                              SkillRecordRepository skillRepo,
                              TalentProfileRepository profileRepo,
-                             JdbcTemplate jdbcTemplate) {
+                             JdbcTemplate jdbcTemplate,
+                             com.carter.common.QuotaManager quotaManager) {
         this.chatClient = builder.build();
         this.embeddingModel = embeddingModel;
         this.skillRepo = skillRepo;
         this.profileRepo = profileRepo;
         this.jdbcTemplate = jdbcTemplate;
+        this.quotaManager = quotaManager;
     }
 
     /**
@@ -72,7 +75,15 @@ public class SummarizerService {
      */
     @Transactional
     public TalentProfile generateProfile(String employeeName) {
-        log.info("Generating profile for employee: {}", employeeName);
+        return generateProfile(employeeName, false);
+    }
+
+    /**
+     * Generates profile with optional embedding generation.
+     */
+    @Transactional
+    public TalentProfile generateProfile(String employeeName, boolean skipEmbedding) {
+        log.info("Generating profile for employee: {} (skipEmbedding={})", employeeName, skipEmbedding);
 
         List<SkillRecord> records = skillRepo.findByEmployeeName(employeeName);
         if (records.isEmpty()) {
@@ -81,7 +92,10 @@ public class SummarizerService {
 
         ProfileSummary aiResult = generateAiSummary(employeeName, records);
         TalentProfile profile = saveProfile(employeeName, aiResult);
-        updateProfileVector(profile, aiResult);
+        
+        if (!skipEmbedding) {
+            updateProfileVector(profile, aiResult);
+        }
 
         log.info("Profile generated for {}: {} skills extracted", employeeName,
                 aiResult != null && aiResult.tagsZh() != null ? aiResult.tagsZh().size() : 0);
@@ -149,6 +163,9 @@ public class SummarizerService {
 
         // Use English summary for vector (better for semantic search)
         String textForVector = aiResult.summaryEn() + " " + String.join(", ", aiResult.tagsEn());
+        
+        // Rate limit protection
+        quotaManager.acquireEmbeddingQuota();
         float[] vector = embeddingModel.embed(textForVector);
         jdbcTemplate.update(UPDATE_VECTOR_SQL, vector, profile.getId());
 

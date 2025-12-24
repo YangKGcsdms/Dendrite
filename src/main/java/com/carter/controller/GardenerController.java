@@ -3,18 +3,17 @@ package com.carter.controller;
 import com.carter.common.Constants;
 import com.carter.dto.ApiResponse;
 import com.carter.dto.EvaluationRequest;
-import com.carter.dto.QueueStatusResponse;
 import com.carter.dto.SearchResultDto;
 import com.carter.entity.TalentProfile;
-import com.carter.pipeline.EvaluationPipeline;
+import com.carter.service.EvaluationProcessorService;
 import com.carter.service.SearchService;
 import com.carter.service.SummarizerService;
+import com.carter.service.TaskProgressService;
+import com.carter.service.TaskProgressService.TaskProgress;
 import com.carter.service.TokenUsageTracker;
-import com.carter.task.EvaluationTask;
-import com.carter.task.worker.GardenerWorker;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -29,71 +28,89 @@ import java.util.List;
 public class GardenerController {
 
     private final SearchService searchService;
-    private final RedisTemplate<String, Object> redisTemplate;
     private final SummarizerService summarizerService;
-    private final GardenerWorker gardenerWorker;
     private final TokenUsageTracker tokenTracker;
+    private final EvaluationProcessorService processorService;
+    private final TaskProgressService progressService;
 
-    public GardenerController(RedisTemplate<String, Object> redisTemplate,
-                              SummarizerService summarizerService,
+    public GardenerController(SummarizerService summarizerService,
                               SearchService searchService,
-                              GardenerWorker gardenerWorker,
-                              TokenUsageTracker tokenTracker) {
-        this.redisTemplate = redisTemplate;
+                              TokenUsageTracker tokenTracker,
+                              EvaluationProcessorService processorService,
+                              TaskProgressService progressService) {
         this.summarizerService = summarizerService;
         this.searchService = searchService;
-        this.gardenerWorker = gardenerWorker;
         this.tokenTracker = tokenTracker;
+        this.processorService = processorService;
+        this.progressService = progressService;
     }
 
     // ==========================================
-    // Evaluation Endpoints
+    // Evaluation Endpoints (Real-time Processing)
     // ==========================================
 
     /**
-     * Submits a single evaluation to the processing queue.
+     * Submits an evaluation and processes it immediately.
+     * Returns a task ID for progress tracking.
      *
      * @param employee the employee being evaluated
      * @param content the evaluation content
-     * @return submission confirmation
+     * @return task ID for progress tracking
      */
     @PostMapping("/evaluate")
     public ApiResponse<EvaluationSubmitResult> submitEvaluation(
             @RequestParam String employee,
             @RequestBody String content) {
 
-        EvaluationTask task = new EvaluationTask(employee, content);
-        redisTemplate.opsForList().leftPush(Constants.REDIS_QUEUE_KEY, task);
-
-        Long queueSize = gardenerWorker.getQueueSize();
+        // Create task and start processing immediately
+        String taskId = progressService.createTask(employee);
+        
+        // Process asynchronously
+        processorService.processEvaluation(taskId, employee, content);
 
         return ApiResponse.success(
-                new EvaluationSubmitResult(employee, "queued", queueSize),
-                "Evaluation queued for processing"
+                new EvaluationSubmitResult(taskId, employee, "processing"),
+                "Evaluation submitted, processing started"
         );
     }
 
     /**
-     * Submits multiple evaluations in batch.
+     * Gets the progress of a task.
+     *
+     * @param taskId task ID
+     * @return current progress
+     */
+    @GetMapping("/task/{taskId}")
+    public ApiResponse<TaskProgress> getTaskProgress(@PathVariable String taskId) {
+        TaskProgress progress = progressService.getProgress(taskId);
+        if (progress == null) {
+            return ApiResponse.error("Task not found: " + taskId);
+        }
+        return ApiResponse.success(progress);
+    }
+
+    /**
+     * Submits multiple evaluations and processes them.
      *
      * @param evaluations list of evaluation requests
-     * @return batch submission result
+     * @return list of task IDs
      */
     @PostMapping("/evaluate/batch")
     public ApiResponse<BatchSubmitResult> submitBatchEvaluations(
             @RequestBody List<EvaluationRequest> evaluations) {
 
-        int count = 0;
+        List<String> taskIds = new ArrayList<>();
+        
         for (EvaluationRequest eval : evaluations) {
-            eval.validate(); // Manual validation
-            EvaluationTask task = new EvaluationTask(eval.employee(), eval.content());
-            redisTemplate.opsForList().leftPush(Constants.REDIS_QUEUE_KEY, task);
-            count++;
+            eval.validate();
+            String taskId = progressService.createTask(eval.employee());
+            processorService.processEvaluation(taskId, eval.employee(), eval.content());
+            taskIds.add(taskId);
         }
 
         return ApiResponse.success(
-                new BatchSubmitResult(count, gardenerWorker.getQueueSize()),
-                String.format("Submitted %d evaluations", count)
+                new BatchSubmitResult(taskIds.size(), taskIds),
+                String.format("Submitted %d evaluations for processing", taskIds.size())
         );
     }
 
@@ -168,40 +185,6 @@ public class GardenerController {
     }
 
     // ==========================================
-    // Management Endpoints
-    // ==========================================
-
-    /**
-     * Returns current queue status.
-     */
-    @GetMapping("/queue/status")
-    public ApiResponse<QueueStatusResponse> getQueueStatus() {
-        Long size = gardenerWorker.getQueueSize();
-        return ApiResponse.success(QueueStatusResponse.of(size != null ? size : 0));
-    }
-
-    /**
-     * Manually triggers queue processing (for testing).
-     */
-    @PostMapping("/queue/process")
-    public ApiResponse<PipelineExecutionResult> manualProcessQueue() {
-        EvaluationPipeline.PipelineResult result = gardenerWorker.triggerManualProcess();
-
-        if (result == null) {
-            return ApiResponse.success(null, "Queue is empty, nothing to process");
-        }
-
-        return ApiResponse.success(new PipelineExecutionResult(
-                result.isSuccess(),
-                result.getEvaluatedCount(),
-                result.getProfilesUpdated(),
-                result.getVectorsStored(),
-                result.getDurationMs(),
-                result.getErrorMessage()
-        ));
-    }
-
-    // ==========================================
     // Token Monitoring
     // ==========================================
 
@@ -243,10 +226,7 @@ public class GardenerController {
     // Response DTOs
     // ==========================================
 
-    public record EvaluationSubmitResult(String employee, String status, Long queuePosition) {}
-    public record BatchSubmitResult(int submitted, Long totalQueued) {}
-    public record PipelineExecutionResult(
-            boolean success, int skillsExtracted, int profilesUpdated,
-            int vectorsStored, long durationMs, String error) {}
+    public record EvaluationSubmitResult(String taskId, String employee, String status) {}
+    public record BatchSubmitResult(int submitted, List<String> taskIds) {}
     public record CostModeResult(boolean economyMode, boolean queryExpansion) {}
 }

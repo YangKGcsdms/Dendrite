@@ -53,7 +53,8 @@ public class DendriteException extends RuntimeException {
 
         // System related
         INTERNAL_ERROR("X001", "Internal server error"),
-        INVALID_PARAMETER("X002", "Invalid parameter");
+        INVALID_PARAMETER("X002", "Invalid parameter"),
+        PROCESSING_ERROR("X003", "Processing error occurred");
 
         private final String code;
         private final String message;

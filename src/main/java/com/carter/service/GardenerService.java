@@ -16,6 +16,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.ai.embedding.EmbeddingModel;
+import org.springframework.ai.embedding.EmbeddingRequest;
+import org.springframework.ai.embedding.EmbeddingResponse;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -41,19 +43,22 @@ public class GardenerService {
     private final ContributorProfileRepository contributorRepo;
     private final RewardService rewardService;
     private final EmbeddingModel embeddingModel;
+    private final com.carter.common.QuotaManager quotaManager;
 
     public GardenerService(ChatClient.Builder builder,
                            SkillRecordRepository skillRepository,
                            EvaluationTagRepository tagRepo,
                            ContributorProfileRepository contributorRepo,
                            RewardService rewardService,
-                           EmbeddingModel embeddingModel) {
+                           EmbeddingModel embeddingModel,
+                           com.carter.common.QuotaManager quotaManager) {
         this.chatClient = builder.build();
         this.skillRepository = skillRepository;
         this.tagRepo = tagRepo;
         this.contributorRepo = contributorRepo;
         this.rewardService = rewardService;
         this.embeddingModel = embeddingModel;
+        this.quotaManager = quotaManager;
     }
 
     // ==========================================
@@ -78,7 +83,19 @@ public class GardenerService {
      * @throws DendriteException if AI parsing fails
      */
     public List<SkillRecord> processEvaluation(String targetEmployee, String rawText) {
-        log.info("Processing evaluation for employee: {}", targetEmployee);
+        return processEvaluation(targetEmployee, rawText, false);
+    }
+
+    /**
+     * Processes a single evaluation with optional embedding generation.
+     *
+     * @param targetEmployee the employee being evaluated
+     * @param rawText the evaluation content
+     * @param skipEmbedding true to skip vector generation (for batch optimization)
+     * @return list of extracted skill records
+     */
+    public List<SkillRecord> processEvaluation(String targetEmployee, String rawText, boolean skipEmbedding) {
+        log.info("Processing evaluation for employee: {} (skipEmbedding={})", targetEmployee, skipEmbedding);
 
         var converter = new BeanOutputConverter<>(AiResponse.class);
         String promptText = buildEvaluationPrompt(targetEmployee, rawText, converter.getFormat());
@@ -91,9 +108,8 @@ public class GardenerService {
             return List.of();
         }
 
-        List<SkillRecord> records = aiData.skills().stream()
-                .map(skill -> createSkillRecord(targetEmployee, skill))
-                .toList();
+        // Create skill records (optionally skipping embedding)
+        List<SkillRecord> records = createSkillRecordsBatch(targetEmployee, aiData.skills(), skipEmbedding);
 
         log.info("Extracted {} skills for employee: {}", records.size(), targetEmployee);
         return skillRepository.saveAll(records);
@@ -140,9 +156,12 @@ public class GardenerService {
                 continue;
             }
 
-            List<SkillRecord> records = employeeResult.skills().stream()
-                    .map(skill -> createSkillRecord(employeeResult.employeeName(), skill))
-                    .toList();
+            // Use batch embedding to reduce API calls
+            List<SkillRecord> records = createSkillRecordsBatch(
+                    employeeResult.employeeName(), 
+                    employeeResult.skills(),
+                    false // Batch processing currently does not support the skip optimization in this method yet
+            );
 
             allRecords.addAll(skillRepository.saveAll(records));
         }
@@ -192,17 +211,80 @@ public class GardenerService {
     // Private Helpers
     // ==========================================
 
-    private SkillRecord createSkillRecord(String employeeName, SkillExtractionResult skill) {
-        SkillRecord record = new SkillRecord();
-        record.setEmployeeName(employeeName);
-        record.setSkillName(skill.skillName());
-        record.setProficiency(skill.proficiency());
-        record.setEvidence(skill.evidence());
-        record.setEmbedding(generateVector(skill.skillName() + ": " + skill.evidence()));
-        return record;
+    /**
+     * Creates skill records with batch embedding to reduce API calls.
+     * Instead of calling embedding API N times for N skills,
+     * we call it once with all texts concatenated (if supported) or with rate limiting.
+     */
+    private List<SkillRecord> createSkillRecordsBatch(String employeeName, List<SkillExtractionResult> skills, boolean skipEmbedding) {
+        if (skills == null || skills.isEmpty()) {
+            return List.of();
+        }
+
+        List<List<Double>> embeddings = new ArrayList<>();
+        if (!skipEmbedding) {
+            // Prepare texts for batch embedding
+            List<String> texts = skills.stream()
+                    .map(skill -> skill.skillName() + ": " + skill.evidence())
+                    .toList();
+            // Batch generate embeddings
+            embeddings = generateVectorsBatch(texts);
+        }
+
+        // Create skill records
+        List<SkillRecord> records = new ArrayList<>();
+        for (int i = 0; i < skills.size(); i++) {
+            SkillExtractionResult skill = skills.get(i);
+            SkillRecord record = new SkillRecord();
+            record.setEmployeeName(employeeName);
+            record.setSkillName(skill.skillName());
+            record.setProficiency(skill.proficiency());
+            record.setEvidence(skill.evidence());
+            
+            if (!skipEmbedding && i < embeddings.size()) {
+                record.setEmbedding(embeddings.get(i));
+            } else {
+                // If skipping, leave null or empty? 
+                // SkillRecord embedding might be nullable or need initialization.
+                // Assuming nullable or we can set it later.
+                record.setEmbedding(null);
+            }
+            records.add(record);
+        }
+
+        return records;
+    }
+
+    /**
+     * Generates embeddings in batch with rate limiting to avoid quota errors.
+     * Uses batch embedding capability to process multiple texts in one API call.
+     */
+    private List<List<Double>> generateVectorsBatch(List<String> texts) {
+        if (texts.isEmpty()) {
+            return List.of();
+        }
+
+        try {
+            // Acquire quota once for the entire batch
+            quotaManager.acquireEmbeddingQuota();
+            
+            // Call API with batch request
+            EmbeddingResponse response = embeddingModel.call(
+                new EmbeddingRequest(texts, null)
+            );
+            
+            return response.getResults().stream()
+                    .map(embedding -> VectorUtils.toDoubleList(embedding.getOutput()))
+                    .toList();
+            
+        } catch (Exception e) {
+            log.error("Batch embedding failed for {} texts", texts.size(), e);
+            throw new DendriteException(ErrorCode.PROCESSING_ERROR, "Batch embedding failed: " + e.getMessage());
+        }
     }
 
     private List<Double> generateVector(String text) {
+        quotaManager.acquireEmbeddingQuota();
         float[] vectorFloat = embeddingModel.embed(text);
         return VectorUtils.toDoubleList(vectorFloat);
     }

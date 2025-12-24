@@ -233,10 +233,10 @@
                                 <i data-lucide="users" class="w-5 h-5 text-purple-400 mb-2"></i>
                                 <p class="text-sm font-medium" x-text="t('viewProfiles')"></p>
                             </button>
-                            <button @click="processQueue()" 
+                            <button @click="currentPage = 'monitor'" 
                                     class="p-4 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-lg transition-all text-left">
-                                <i data-lucide="play" class="w-5 h-5 text-amber-400 mb-2"></i>
-                                <p class="text-sm font-medium" x-text="t('processQueue')"></p>
+                                <i data-lucide="activity" class="w-5 h-5 text-amber-400 mb-2"></i>
+                                <p class="text-sm font-medium" x-text="t('monitor')"></p>
                             </button>
                         </div>
                     </div>
@@ -260,65 +260,138 @@
             </div>
             
             <!-- Knowledge Input Page -->
-            <div x-show="currentPage === 'knowledge'" x-transition:enter="fade-in" class="max-w-4xl">
-                <div class="bg-black/40 backdrop-blur border border-dendrite-500/20 rounded-xl p-8">
-                    <h3 class="text-lg font-semibold mb-6 flex items-center gap-2">
-                        <i data-lucide="file-plus" class="w-5 h-5 text-dendrite-400"></i>
-                        <span x-text="t('submitEvaluation')"></span>
-                    </h3>
-                    
-                    <form @submit.prevent="submitEvaluation()" class="space-y-6">
-                        <div>
-                            <label class="block text-sm text-gray-400 mb-2" x-text="t('employeeName')"></label>
-                            <input type="text" x-model="evalForm.employee" required
-                                   class="w-full bg-black/40 border border-dendrite-500/30 rounded-lg px-4 py-3 text-white placeholder-gray-600 focus:border-dendrite-400 focus:outline-none focus:ring-1 focus:ring-dendrite-400/50 transition-all"
-                                   :placeholder="t('employeePlaceholder')">
+            <div x-show="currentPage === 'knowledge'" x-transition:enter="fade-in">
+                <div class="grid grid-cols-3 gap-6">
+                    <!-- Left: Evaluation Form -->
+                    <div class="col-span-2 space-y-6">
+                        <div class="bg-black/40 backdrop-blur border border-dendrite-500/20 rounded-xl p-8">
+                            <h3 class="text-lg font-semibold mb-6 flex items-center gap-2">
+                                <i data-lucide="file-plus" class="w-5 h-5 text-dendrite-400"></i>
+                                <span x-text="t('submitEvaluation')"></span>
+                            </h3>
+                            
+                            <form @submit.prevent="submitEvaluation()" class="space-y-6">
+                                <div>
+                                    <label class="block text-sm text-gray-400 mb-2" x-text="t('employeeName')"></label>
+                                    <input type="text" x-model="evalForm.employee" required
+                                           class="w-full bg-black/40 border border-dendrite-500/30 rounded-lg px-4 py-3 text-white placeholder-gray-600 focus:border-dendrite-400 focus:outline-none focus:ring-1 focus:ring-dendrite-400/50 transition-all"
+                                           :placeholder="t('employeePlaceholder')">
+                                </div>
+                                
+                                <div>
+                                    <label class="block text-sm text-gray-400 mb-2" x-text="t('evaluationContent')"></label>
+                                    <textarea x-model="evalForm.content" required rows="8"
+                                              class="w-full bg-black/40 border border-dendrite-500/30 rounded-lg px-4 py-3 text-white placeholder-gray-600 focus:border-dendrite-400 focus:outline-none focus:ring-1 focus:ring-dendrite-400/50 transition-all resize-none"
+                                              :placeholder="t('contentPlaceholder')"></textarea>
+                                </div>
+                                
+                                <div class="flex items-center justify-between">
+                                    <div class="text-sm text-gray-500">
+                                        <i data-lucide="info" class="w-4 h-4 inline mr-1"></i>
+                                        <span x-text="t('aiExtractHint')"></span>
+                                    </div>
+                                    <button type="submit" :disabled="evalLoading"
+                                            class="px-6 py-3 bg-gradient-to-r from-dendrite-500 to-dendrite-600 hover:from-dendrite-400 hover:to-dendrite-500 text-black font-semibold rounded-lg transition-all duration-300 disabled:opacity-50 flex items-center gap-2">
+                                        <i data-lucide="send" class="w-4 h-4" x-show="!evalLoading"></i>
+                                        <i data-lucide="loader-2" class="w-4 h-4 animate-spin" x-show="evalLoading"></i>
+                                        <span x-text="evalLoading ? t('submitting') : t('submit')"></span>
+                                    </button>
+                                </div>
+                            </form>
                         </div>
                         
-                        <div>
-                            <label class="block text-sm text-gray-400 mb-2" x-text="t('evaluationContent')"></label>
-                            <textarea x-model="evalForm.content" required rows="8"
-                                      class="w-full bg-black/40 border border-dendrite-500/30 rounded-lg px-4 py-3 text-white placeholder-gray-600 focus:border-dendrite-400 focus:outline-none focus:ring-1 focus:ring-dendrite-400/50 transition-all resize-none"
-                                      :placeholder="t('contentPlaceholder')"></textarea>
-                        </div>
-                        
-                        <div class="flex items-center justify-between">
-                            <div class="text-sm text-gray-500">
-                                <i data-lucide="info" class="w-4 h-4 inline mr-1"></i>
-                                <span x-text="t('aiExtractHint')"></span>
-                            </div>
-                            <button type="submit" :disabled="evalLoading"
-                                    class="px-6 py-3 bg-gradient-to-r from-dendrite-500 to-dendrite-600 hover:from-dendrite-400 hover:to-dendrite-500 text-black font-semibold rounded-lg transition-all duration-300 disabled:opacity-50 flex items-center gap-2">
-                                <i data-lucide="send" class="w-4 h-4" x-show="!evalLoading"></i>
-                                <i data-lucide="loader-2" class="w-4 h-4 animate-spin" x-show="evalLoading"></i>
-                                <span x-text="evalLoading ? t('submitting') : t('submit')"></span>
+                        <!-- Batch Upload -->
+                        <div class="bg-black/40 backdrop-blur border border-dendrite-500/20 rounded-xl p-8">
+                            <h3 class="text-lg font-semibold mb-6 flex items-center gap-2">
+                                <i data-lucide="upload" class="w-5 h-5 text-blue-400"></i>
+                                <span x-text="t('batchUpload')"></span>
+                            </h3>
+                            <textarea x-model="batchJson" rows="4"
+                                      class="w-full bg-black/40 border border-blue-500/30 rounded-lg px-4 py-3 text-white placeholder-gray-600 focus:border-blue-400 focus:outline-none font-mono text-sm"
+                                      :placeholder="t('batchPlaceholder')"></textarea>
+                            <button @click="submitBatch()" 
+                                    class="mt-4 px-6 py-3 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/40 text-blue-400 font-medium rounded-lg transition-all">
+                                <i data-lucide="upload-cloud" class="w-4 h-4 inline mr-2"></i>
+                                <span x-text="t('uploadBatch')"></span>
                             </button>
                         </div>
-                    </form>
+                    </div>
                     
-                    <!-- Success Message -->
-                    <div x-show="evalSuccess" x-transition class="mt-6 p-4 bg-dendrite-500/20 border border-dendrite-500/40 rounded-lg">
-                        <div class="flex items-center gap-2 text-dendrite-400">
-                            <i data-lucide="check-circle" class="w-5 h-5"></i>
-                            <span x-text="t('submitSuccess') + evalQueuePos"></span>
+                    <!-- Right: Task Progress Panel -->
+                    <div class="col-span-1">
+                        <div class="bg-black/40 backdrop-blur border border-dendrite-500/20 rounded-xl p-6 sticky top-24">
+                            <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                                <i data-lucide="activity" class="w-5 h-5 text-purple-400"></i>
+                                <span x-text="t('processingStatus')"></span>
+                            </h3>
+                            
+                            <!-- No Active Tasks -->
+                            <div x-show="activeTasks.length === 0" class="text-center py-8">
+                                <i data-lucide="inbox" class="w-12 h-12 text-gray-700 mx-auto mb-3"></i>
+                                <p class="text-gray-500 text-sm" x-text="t('noActiveTasks')"></p>
+                            </div>
+                            
+                            <!-- Active Tasks -->
+                            <div class="space-y-4">
+                                <template x-for="task in activeTasks" :key="task.taskId">
+                                    <div class="bg-black/40 border rounded-lg p-4 transition-all"
+                                         :class="task.status === 'COMPLETED' ? 'border-dendrite-500/50' : 
+                                                 task.status === 'FAILED' ? 'border-red-500/50' : 
+                                                 'border-purple-500/50'">
+                                        <!-- Task Header -->
+                                        <div class="flex items-center justify-between mb-3">
+                                            <div class="flex items-center gap-2">
+                                                <div class="w-8 h-8 bg-gradient-to-br from-dendrite-400 to-dendrite-600 rounded-full flex items-center justify-center text-black font-bold text-sm"
+                                                     x-text="task.employeeName?.charAt(0) || '?'"></div>
+                                                <span class="font-medium text-white" x-text="task.employeeName"></span>
+                                            </div>
+                                            <span class="text-xs px-2 py-1 rounded-full"
+                                                  :class="task.status === 'COMPLETED' ? 'bg-dendrite-500/20 text-dendrite-400' : 
+                                                          task.status === 'FAILED' ? 'bg-red-500/20 text-red-400' : 
+                                                          task.status === 'PROCESSING' ? 'bg-purple-500/20 text-purple-400' :
+                                                          'bg-gray-500/20 text-gray-400'"
+                                                  x-text="getStatusText(task.status)"></span>
+                                        </div>
+                                        
+                                        <!-- Progress Bar -->
+                                        <div class="mb-2">
+                                            <div class="h-2 bg-gray-800 rounded-full overflow-hidden">
+                                                <div class="h-full transition-all duration-500 ease-out rounded-full"
+                                                     :class="task.status === 'COMPLETED' ? 'bg-dendrite-500' : 
+                                                             task.status === 'FAILED' ? 'bg-red-500' : 
+                                                             'bg-purple-500'"
+                                                     :style="'width: ' + task.percent + '%'"></div>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Current Step -->
+                                        <div class="flex items-center justify-between text-xs">
+                                            <span class="text-gray-400" x-text="lang === 'zh' ? task.stepZh : task.stepEn"></span>
+                                            <span class="text-gray-500" x-text="task.percent + '%'"></span>
+                                        </div>
+                                        
+                                        <!-- Processing Animation -->
+                                        <div x-show="task.status === 'PROCESSING'" class="mt-3 flex items-center gap-2">
+                                            <div class="flex gap-1">
+                                                <div class="w-1.5 h-1.5 bg-purple-400 rounded-full animate-bounce" style="animation-delay: 0ms"></div>
+                                                <div class="w-1.5 h-1.5 bg-purple-400 rounded-full animate-bounce" style="animation-delay: 150ms"></div>
+                                                <div class="w-1.5 h-1.5 bg-purple-400 rounded-full animate-bounce" style="animation-delay: 300ms"></div>
+                                            </div>
+                                            <span class="text-xs text-purple-400" x-text="t('aiProcessing')"></span>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                            
+                            <!-- Completed Count -->
+                            <div x-show="completedCount > 0" class="mt-4 pt-4 border-t border-gray-800">
+                                <div class="flex items-center justify-between text-sm">
+                                    <span class="text-gray-500" x-text="t('completedToday')"></span>
+                                    <span class="text-dendrite-400 font-mono" x-text="completedCount"></span>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                </div>
-                
-                <!-- Batch Upload -->
-                <div class="bg-black/40 backdrop-blur border border-dendrite-500/20 rounded-xl p-8 mt-6">
-                    <h3 class="text-lg font-semibold mb-6 flex items-center gap-2">
-                        <i data-lucide="upload" class="w-5 h-5 text-blue-400"></i>
-                        <span x-text="t('batchUpload')"></span>
-                    </h3>
-                    <textarea x-model="batchJson" rows="6"
-                              class="w-full bg-black/40 border border-blue-500/30 rounded-lg px-4 py-3 text-white placeholder-gray-600 focus:border-blue-400 focus:outline-none font-mono text-sm"
-                              :placeholder="t('batchPlaceholder')"></textarea>
-                    <button @click="submitBatch()" 
-                            class="mt-4 px-6 py-3 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/40 text-blue-400 font-medium rounded-lg transition-all">
-                        <i data-lucide="upload-cloud" class="w-4 h-4 inline mr-2"></i>
-                        <span x-text="t('uploadBatch')"></span>
-                    </button>
                 </div>
             </div>
             
@@ -454,24 +527,23 @@
             <!-- Monitor Page -->
             <div x-show="currentPage === 'monitor'" x-transition:enter="fade-in" class="space-y-6">
                 <div class="grid grid-cols-2 gap-6">
-                    <!-- Queue Status -->
+                    <!-- Real-time Processing Info -->
                     <div class="bg-black/40 backdrop-blur border border-dendrite-500/20 rounded-xl p-6">
                         <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
-                            <i data-lucide="list-todo" class="w-5 h-5 text-amber-400"></i>
-                            <span x-text="t('evaluationQueue')"></span>
+                            <i data-lucide="zap" class="w-5 h-5 text-purple-400"></i>
+                            <span x-text="t('realtimeProcessing')"></span>
                         </h3>
                         <div class="flex items-center justify-between mb-4">
                             <div>
-                                <p class="text-4xl font-bold text-amber-400" x-text="stats.queueSize"></p>
-                                <p class="text-sm text-gray-500" x-text="t('pendingTasks')"></p>
+                                <p class="text-4xl font-bold text-purple-400" x-text="activeTasks.filter(t => t.status === 'PROCESSING').length"></p>
+                                <p class="text-sm text-gray-500" x-text="t('activeProcessing')"></p>
                             </div>
-                            <button @click="processQueue()" 
-                                    class="px-4 py-2 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-400 rounded-lg transition-all">
-                                <i data-lucide="play" class="w-4 h-4 inline mr-2"></i>
-                                <span x-text="t('processNow')"></span>
-                            </button>
+                            <div class="text-right">
+                                <p class="text-2xl font-bold text-dendrite-400" x-text="completedCount"></p>
+                                <p class="text-sm text-gray-500" x-text="t('completedToday')"></p>
+                            </div>
                         </div>
-                        <div class="text-xs text-gray-500" x-text="t('autoProcessHint')"></div>
+                        <div class="text-xs text-gray-500" x-text="t('realtimeHint')"></div>
                     </div>
                     
                     <!-- Token Usage -->
@@ -634,7 +706,6 @@
                 addEvaluation: '添加评价',
                 searchTalents: '搜索人才',
                 viewProfiles: '查看画像',
-                processQueue: '处理队列',
                 systemLog: '系统日志',
                 submitEvaluation: '提交评价',
                 employeeName: '员工姓名',
@@ -644,8 +715,16 @@
                 aiExtractHint: 'AI 将自动提取技能并生成人才画像',
                 submitting: '提交中...',
                 submit: '提交评价',
-                submitSuccess: '评价提交成功！队列位置：',
+                submitSuccess: '评价已提交，正在处理...',
                 batchUpload: '批量上传 (JSON)',
+                processingStatus: '处理状态',
+                noActiveTasks: '暂无处理任务',
+                aiProcessing: 'AI 正在分析...',
+                completedToday: '今日完成',
+                statusQueued: '排队中',
+                statusProcessing: '处理中',
+                statusCompleted: '已完成',
+                statusFailed: '失败',
                 batchPlaceholder: '[\n  {"employee": "张三", "content": "精通 Java 和 Spring Boot..."},\n  {"employee": "李四", "content": "前端专家，擅长 React 和 Vue..."}\n]',
                 uploadBatch: '批量上传',
                 filterByName: '按姓名筛选...',
@@ -658,10 +737,9 @@
                 aiRecommendation: 'AI 推荐结果',
                 matchScore: '匹配度',
                 noResults: '未找到匹配的人才',
-                evaluationQueue: '评价队列',
-                pendingTasks: '待处理任务',
-                processNow: '立即处理',
-                autoProcessHint: '每 5 分钟自动处理，批量大小：10',
+                realtimeProcessing: '实时处理',
+                activeProcessing: '处理中',
+                realtimeHint: '提交评价后立即开始处理，无需等待队列',
                 tokenUsageTitle: 'Token 使用统计',
                 totalCost: '总费用',
                 chatCalls: '对话调用次数',
@@ -705,7 +783,6 @@
                 addEvaluation: 'Add Evaluation',
                 searchTalents: 'Search Talents',
                 viewProfiles: 'View Profiles',
-                processQueue: 'Process Queue',
                 systemLog: 'System Log',
                 submitEvaluation: 'Submit Evaluation',
                 employeeName: 'Employee Name',
@@ -715,8 +792,16 @@
                 aiExtractHint: 'AI will extract skills and build talent profile automatically',
                 submitting: 'Submitting...',
                 submit: 'Submit Evaluation',
-                submitSuccess: 'Evaluation submitted! Queue position: ',
+                submitSuccess: 'Evaluation submitted, processing...',
                 batchUpload: 'Batch Upload (JSON)',
+                processingStatus: 'Processing Status',
+                noActiveTasks: 'No active tasks',
+                aiProcessing: 'AI analyzing...',
+                completedToday: 'Completed Today',
+                statusQueued: 'Queued',
+                statusProcessing: 'Processing',
+                statusCompleted: 'Completed',
+                statusFailed: 'Failed',
                 batchPlaceholder: '[\n  {"employee": "John", "content": "Proficient in Java and Spring Boot..."},\n  {"employee": "Jane", "content": "Frontend expert with React and Vue..."}\n]',
                 uploadBatch: 'Upload Batch',
                 filterByName: 'Filter by name...',
@@ -729,10 +814,9 @@
                 aiRecommendation: 'AI Recommendation',
                 matchScore: 'Match Score',
                 noResults: 'No matching talents found',
-                evaluationQueue: 'Evaluation Queue',
-                pendingTasks: 'Pending Tasks',
-                processNow: 'Process Now',
-                autoProcessHint: 'Auto-processing every 5 minutes, batch size: 10',
+                realtimeProcessing: 'Real-time Processing',
+                activeProcessing: 'Active',
+                realtimeHint: 'Evaluations are processed immediately after submission',
                 tokenUsageTitle: 'Token Usage',
                 totalCost: 'Total Cost',
                 chatCalls: 'Chat Calls',
@@ -783,6 +867,11 @@
                 evalQueuePos: 0,
                 batchJson: '',
                 
+                // Task Progress Tracking
+                activeTasks: [],
+                completedCount: 0,
+                taskPollingInterval: null,
+                
                 // Profiles
                 profiles: [],
                 filteredProfiles: [],
@@ -826,6 +915,71 @@
                     } else {
                         return profile.skillsEn || profile.topSkills || [];
                     }
+                },
+                
+                // Task status helper
+                getStatusText(status) {
+                    const statusMap = {
+                        'QUEUED': this.t('statusQueued'),
+                        'PROCESSING': this.t('statusProcessing'),
+                        'COMPLETED': this.t('statusCompleted'),
+                        'FAILED': this.t('statusFailed')
+                    };
+                    return statusMap[status] || status;
+                },
+                
+                // Start polling for task progress
+                startTaskPolling() {
+                    if (this.taskPollingInterval) return;
+                    
+                    this.taskPollingInterval = setInterval(async () => {
+                        await this.pollTaskProgress();
+                    }, 2000); // Poll every 2 seconds
+                },
+                
+                // Stop polling when no active tasks
+                stopTaskPolling() {
+                    if (this.taskPollingInterval) {
+                        clearInterval(this.taskPollingInterval);
+                        this.taskPollingInterval = null;
+                    }
+                },
+                
+                // Poll progress for all active tasks
+                async pollTaskProgress() {
+                    const pendingTasks = this.activeTasks.filter(t => 
+                        t.status === 'QUEUED' || t.status === 'PROCESSING'
+                    );
+                    
+                    if (pendingTasks.length === 0) {
+                        this.stopTaskPolling();
+                        return;
+                    }
+                    
+                    for (const task of pendingTasks) {
+                        try {
+                            const res = await fetch(`/api/v1/gardener/task/${task.taskId}`);
+                            const data = await res.json();
+                            
+                            if (data.success && data.data) {
+                                const idx = this.activeTasks.findIndex(t => t.taskId === task.taskId);
+                                if (idx !== -1) {
+                                    this.activeTasks[idx] = data.data;
+                                    
+                                    // If completed, refresh profiles
+                                    if (data.data.status === 'COMPLETED') {
+                                        this.completedCount++;
+                                        this.loadProfiles();
+                                        this.refreshStats();
+                                    }
+                                }
+                            }
+                        } catch (e) {
+                            console.error('Failed to poll task:', task.taskId, e);
+                        }
+                    }
+                    
+                    this.$nextTick(() => lucide.createIcons());
                 },
                 
                 setLang(newLang) {
@@ -920,13 +1074,24 @@
                         });
                         const data = await res.json();
                         
-                        if (data.success) {
+                        if (data.success && data.data?.taskId) {
+                            // Add task to active tasks for real-time tracking
+                            this.activeTasks.unshift({
+                                taskId: data.data.taskId,
+                                employeeName: data.data.employee,
+                                status: 'QUEUED',
+                                stepZh: '已提交，等待处理...',
+                                stepEn: 'Submitted, waiting...',
+                                percent: 0
+                            });
+                            
+                            // Start polling for progress
+                            this.startTaskPolling();
+                            
                             this.evalSuccess = true;
-                            this.evalQueuePos = data.data?.queuePosition || 0;
                             this.evalForm = { employee: '', content: '' };
                             this.showToast(this.t('submitSuccess'), 'success');
-                            this.addLog('success', `Submitted: ${data.data?.employee}`);
-                            this.refreshStats();
+                            this.addLog('success', `Submitted: ${data.data.employee}`);
                         } else {
                             this.showToast(data.message || 'Failed', 'error');
                         }
@@ -935,6 +1100,7 @@
                         this.addLog('error', e.message);
                     } finally {
                         this.evalLoading = false;
+                        this.$nextTick(() => lucide.createIcons());
                     }
                 },
                 
@@ -948,10 +1114,25 @@
                         });
                         const data = await res.json();
                         
-                        if (data.success) {
-                            this.showToast(`Submitted ${data.data?.submitted} evaluations`, 'success');
+                        if (data.success && data.data?.taskIds) {
+                            // Add all tasks to tracking
+                            for (let i = 0; i < data.data.taskIds.length; i++) {
+                                this.activeTasks.unshift({
+                                    taskId: data.data.taskIds[i],
+                                    employeeName: evaluations[i]?.employee || 'Unknown',
+                                    status: 'QUEUED',
+                                    stepZh: '已提交，等待处理...',
+                                    stepEn: 'Submitted, waiting...',
+                                    percent: 0
+                                });
+                            }
+                            
+                            // Start polling
+                            this.startTaskPolling();
+                            
+                            this.showToast(`Submitted ${data.data.submitted} evaluations`, 'success');
                             this.batchJson = '';
-                            this.refreshStats();
+                            this.$nextTick(() => lucide.createIcons());
                         }
                     } catch (e) {
                         this.showToast('Invalid JSON format', 'error');
@@ -984,26 +1165,6 @@
                     } finally {
                         this.searchLoading = false;
                         this.$nextTick(() => lucide.createIcons());
-                    }
-                },
-                
-                async processQueue() {
-                    try {
-                        const res = await fetch('/api/v1/gardener/queue/process', { method: 'POST' });
-                        const data = await res.json();
-                        
-                        if (data.success) {
-                            if (data.data) {
-                                this.showToast(`${data.data.skillsExtracted} skills, ${data.data.profilesUpdated} profiles`, 'success');
-                                this.addLog('success', `Pipeline: ${data.data.durationMs}ms`);
-                            } else {
-                                this.showToast(this.lang === 'zh' ? '队列为空' : 'Queue is empty', 'info');
-                            }
-                            this.refreshStats();
-                            this.loadProfiles();
-                        }
-                    } catch (e) {
-                        this.showToast('Process failed', 'error');
                     }
                 },
                 

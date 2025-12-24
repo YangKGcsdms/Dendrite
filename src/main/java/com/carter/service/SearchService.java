@@ -44,6 +44,7 @@ public class SearchService {
     private final ChatClient chatClient;
     private final EvaluationTagRepository tagRepo;
     private final RewardService rewardService;
+    private final com.carter.common.QuotaManager quotaManager;
 
     private final Map<String, String> queryExpansionCache = new ConcurrentHashMap<>();
     private volatile boolean enableQueryExpansion = true;
@@ -52,12 +53,14 @@ public class SearchService {
                          JdbcTemplate jdbcTemplate,
                          ChatClient.Builder builder,
                          EvaluationTagRepository tagRepo,
-                         RewardService rewardService) {
+                         RewardService rewardService,
+                         com.carter.common.QuotaManager quotaManager) {
         this.embeddingModel = embeddingModel;
         this.jdbcTemplate = jdbcTemplate;
         this.chatClient = builder.build();
         this.tagRepo = tagRepo;
         this.rewardService = rewardService;
+        this.quotaManager = quotaManager;
     }
 
     /**
@@ -79,6 +82,7 @@ public class SearchService {
      * @return list of matching profiles with similarity scores
      */
     public List<SearchResultDto> searchSimilarProfiles(String queryText, int limit) {
+        quotaManager.acquireEmbeddingQuota();
         float[] queryVector = embeddingModel.embed(queryText);
 
         List<Map<String, Object>> rawResults = jdbcTemplate.queryForList(SEARCH_SQL, queryVector, limit);
@@ -102,6 +106,7 @@ public class SearchService {
     public String searchAndRecommend(String queryText) {
         String expandedQuery = getExpandedQuery(queryText);
 
+        quotaManager.acquireEmbeddingQuota();
         float[] queryVector = embeddingModel.embed(expandedQuery);
         List<Map<String, Object>> candidates = jdbcTemplate.queryForList(
                 SEARCH_SQL, queryVector, Constants.DEFAULT_SEARCH_LIMIT);
@@ -125,6 +130,7 @@ public class SearchService {
             return;
         }
 
+        quotaManager.acquireEmbeddingQuota();
         float[] queryVector = embeddingModel.embed(query);
 
         for (EvaluationTag tag : tags) {
